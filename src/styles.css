@@ -39,3 +39,20 @@
 .theme-light .app-footer span:first-child{color:#60728a}
 .theme-light .demo-indicator{background:#fff;color:#647792;border-color:#d8e1ec}
 .theme-light .connection-pill{color:#287c79;background:#e1f6f3;border-color:#c7eae6}
+
+.comments-panel{border-top:1px solid var(--line);margin-top:13px;padding-top:13px;display:grid;gap:12px}
+.comment-row{display:flex;align-items:flex-start;gap:9px}
+.comment-row .avatar{width:27px;height:27px;min-width:27px;font-size:10px}
+.comment-copy{min-width:0;display:grid;grid-template-columns:auto 1fr;align-items:center;gap:3px 9px}
+.comment-copy strong{font-size:10px;color:#dce8f7}
+.comment-copy small{font-size:8px;color:#7f90a7}
+.comment-copy p{grid-column:1/-1;font-size:10px;line-height:1.55;color:#b9c7d9;margin:2px 0 0;overflow-wrap:anywhere}
+.comment-composer{display:flex;gap:8px;align-items:center}
+.comment-composer input{flex:1;min-width:0;height:37px;border:1px solid var(--line);border-radius:9px;background:#091321;color:#fff;padding:0 11px;font-size:10px;outline:none}
+.comment-composer input:focus{border-color:var(--cyan)}
+.comment-composer button{width:37px;height:37px;border:0;border-radius:9px;background:linear-gradient(120deg,#59e9df,#9b89ff);color:#07151d;display:grid;place-items:center}
+.comment-composer button:disabled{opacity:.45;cursor:not-allowed}
+.comments-signin{font-size:9px;color:#8293aa;margin:0}
+.theme-light .comment-copy strong{color:#1b2b43}
+.theme-light .comment-copy p{color:#536781}
+.theme-light .comment-composer input{background:#f7faff;color:#1b2b43;border-color:rgba(38,61,91,.17)}
