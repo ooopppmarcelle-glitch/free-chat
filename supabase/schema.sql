@@ -82,6 +82,15 @@ create table public.post_comments (
   created_at timestamptz not null default now()
 );
 
+create table public.post_reactions (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.posts(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  reaction_type text not null default 'like' check (reaction_type in ('like','fire','gg','wow')),
+  created_at timestamptz not null default now(),
+  unique (post_id, user_id)
+);
+
 create table public.reports (
   id uuid primary key default gen_random_uuid(),
   reporter_id uuid not null references auth.users(id) on delete cascade,
@@ -105,6 +114,8 @@ create index posts_created_at_idx on public.posts(created_at desc);
 create index posts_author_id_idx on public.posts(author_id);
 create index post_comments_post_created_idx on public.post_comments(post_id, created_at asc);
 create index post_comments_author_id_idx on public.post_comments(author_id);
+create index post_reactions_post_idx on public.post_reactions(post_id);
+create index post_reactions_user_idx on public.post_reactions(user_id);
 create index reports_status_created_idx on public.reports(status, created_at desc);
 
 alter table public.profiles enable row level security;
@@ -115,11 +126,13 @@ alter table public.conversation_members enable row level security;
 alter table public.messages enable row level security;
 alter table public.posts enable row level security;
 alter table public.post_comments enable row level security;
+alter table public.post_reactions enable row level security;
 alter table public.reports enable row level security;
 
 -- Run once in Supabase to enable live community feed updates:
 -- alter publication supabase_realtime add table public.posts;
 -- alter publication supabase_realtime add table public.post_comments;
+-- alter publication supabase_realtime add table public.post_reactions;
 
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update, delete on public.guilds to authenticated;
@@ -129,6 +142,7 @@ grant select, insert, delete on public.conversation_members to authenticated;
 grant select, insert, update, delete on public.messages to authenticated;
 grant select, insert, update, delete on public.posts to authenticated;
 grant select, insert, delete on public.post_comments to authenticated;
+grant select, insert, delete on public.post_reactions to authenticated;
 grant select, insert, update on public.reports to authenticated;
 
 create policy "Profiles visible to signed-in players"
@@ -271,6 +285,26 @@ with check (
 create policy "Players delete their own comments"
 on public.post_comments for delete to authenticated
 using (author_id = (select auth.uid()));
+
+create policy "Signed-in players read post reactions"
+on public.post_reactions for select to authenticated
+using (exists (select 1 from public.posts p where p.id = post_id));
+create policy "Players react as themselves"
+on public.post_reactions for insert to authenticated
+with check (
+  user_id = (select auth.uid())
+  and exists (select 1 from public.posts p where p.id = post_id)
+);
+create policy "Players remove their own reactions"
+on public.post_reactions for delete to authenticated
+using (user_id = (select auth.uid()));
+
+create policy "Moderators remove community posts"
+on public.posts for delete to authenticated
+using ((auth.jwt()->'app_metadata'->>'role') in ('owner','admin','moderator'));
+create policy "Moderators remove community comments"
+on public.post_comments for delete to authenticated
+using ((auth.jwt()->'app_metadata'->>'role') in ('owner','admin','moderator'));
 
 create policy "Players submit reports about themselves"
 on public.reports for insert to authenticated
