@@ -80,6 +80,7 @@ function Workspace() {
   const [reactionBusy, setReactionBusy] = useState(null);
   const [adminStats, setAdminStats] = useState({ players: 0, posts: 0, guilds: 0, openReports: 0 });
   const [adminReports, setAdminReports] = useState([]);
+  const [adminPlayers, setAdminPlayers] = useState([]);
   const [loadingAdmin, setLoadingAdmin] = useState(false);
   const [reportTarget, setReportTarget] = useState(null);
   const [reportReason, setReportReason] = useState('');
@@ -461,19 +462,21 @@ function Workspace() {
   async function loadAdminDashboard() {
     if (!canModerate || !supabase) return;
     setLoadingAdmin(true);
-    const [players, posts, guildCount, reports, openReports] = await Promise.all([
+    const [players, posts, guildCount, reports, openReports, recentPlayers] = await Promise.all([
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
       supabase.from('posts').select('*', { count: 'exact', head: true }),
       supabase.from('guilds').select('*', { count: 'exact', head: true }),
       supabase.from('reports').select('id, reporter_id, target_type, target_id, reason, status, created_at').order('created_at', { ascending: false }).limit(50),
-      supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'open')
+      supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'open'),
+      supabase.from('profiles').select('user_id, username, display_name, created_at').order('created_at', { ascending: false }).limit(20)
     ]);
-    const firstError = players.error || posts.error || guildCount.error || reports.error || openReports.error;
+    const firstError = players.error || posts.error || guildCount.error || reports.error || openReports.error || recentPlayers.error;
     if (firstError) notify('Tableau de bord partiellement chargé : ' + firstError.message);
     setAdminStats({
       players: players.count || 0, posts: posts.count || 0,
       guilds: guildCount.count || 0, openReports: openReports.count || 0
     });
+    setAdminPlayers(recentPlayers.data || []);
     const reporterIds = [...new Set((reports.data || []).map((report) => report.reporter_id))];
     const { data: profiles } = reporterIds.length
       ? await supabase.from('profiles').select('user_id, username, display_name').in('user_id', reporterIds)
@@ -655,6 +658,8 @@ function Workspace() {
             <article className="admin-stat"><span>GUILDES</span><strong>{adminStats.guilds}</strong></article>
             <article className="admin-stat"><span>À TRAITER</span><strong>{adminStats.openReports}</strong></article>
           </div>
+          <div className="admin-section-heading"><div><div className="eyebrow">COMMUNAUTÉ</div><h2>Joueurs récents</h2></div><span>{adminPlayers.length} affichés</span></div>
+          <div className="admin-player-list">{adminPlayers.map((player) => <div className="admin-player-row" key={player.user_id}><Avatar label={(player.display_name || player.username || 'J').slice(0,1).toUpperCase()} color="cyan" /><div><strong>{player.display_name || player.username}</strong><small>@{player.username} · {new Date(player.created_at).toLocaleDateString('fr-FR')}</small></div></div>)}</div>
           <div className="admin-section-heading"><div><div className="eyebrow">MODÉRATION</div><h2>Signalements récents</h2></div><span>{adminReports.length} affichés</span></div>
           {loadingAdmin ? <p>Chargement du tableau de bord…</p> : adminReports.length === 0 ? <div className="admin-empty"><ShieldCheck size={24} /><strong>Aucun signalement.</strong><span>Les nouveaux signalements apparaîtront ici.</span></div> : <div className="admin-report-list">{adminReports.map((report) => <article className="admin-report" key={report.id}>
             <div className="admin-report-top"><strong>{report.target_type.toUpperCase()}</strong><span className={'report-status status-' + report.status}>{report.status}</span></div>
