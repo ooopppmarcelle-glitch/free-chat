@@ -137,7 +137,7 @@ function App() {
         </header>
 
         {section === 'messages' && (
-          <div className="messenger-layout">
+          <div className={`messenger-layout ${showChatOnMobile ? 'mobile-chat-open' : ''}`}>
             <section className="conversation-panel">
               <div className="panel-heading"><div><div className="eyebrow">TON ESPACE DE COMMUNICATION</div><h1>Messages<span className="title-dot">.</span></h1></div><button className="square-action" onClick={() => notify('La recherche de joueurs sera bientôt disponible.')} aria-label="Nouveau message"><Plus size={19} /></button></div>
               <div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher une discussion..." /><kbd>⌘ K</kbd></div>
