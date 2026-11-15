@@ -120,7 +120,20 @@ function Workspace() {
         mine: message.sender_id === account.id
       })) }));
     });
-    return () => { active = false; };
+    const channel = supabase.channel('free-chat-messages-' + activeChat)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: 'conversation_id=eq.' + activeChat }, ({ new: message }) => {
+        if (!active || !message?.id) return;
+        setMessages((previous) => {
+          const existing = previous[activeChat] || [];
+          if (existing.some((item) => item.id === message.id)) return previous;
+          return { ...previous, [activeChat]: [...existing, {
+            id: message.id, from: message.sender_id === account.id ? gamerName : (currentChat?.name || 'Joueur'),
+            text: message.body, time: new Date(message.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+            mine: message.sender_id === account.id
+          }] };
+        });
+      }).subscribe();
+    return () => { active = false; supabase.removeChannel(channel); };
   }, [account?.id, activeChat]);
 
   async function startDirectConversation(event) {
