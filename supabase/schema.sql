@@ -36,6 +36,15 @@ create table public.conversations (
   kind text not null default 'direct' check (kind in ('direct','group')),
   title text check (title is null or char_length(title) between 1 and 48),
   created_by uuid not null references auth.users(id) on delete restrict,
+  participant_one uuid references auth.users(id) on delete cascade,
+  participant_two uuid references auth.users(id) on delete cascade,
+  constraint conversations_direct_participants_check check (
+    kind <> 'direct' or (
+      participant_one is not null and participant_two is not null
+      and participant_one <> participant_two
+      and created_by in (participant_one, participant_two)
+    )
+  ),
   created_at timestamptz not null default now()
 );
 
@@ -75,6 +84,8 @@ create table public.reports (
 );
 
 create index conversations_created_by_idx on public.conversations(created_by);
+create index conversations_participant_one_idx on public.conversations(participant_one);
+create index conversations_participant_two_idx on public.conversations(participant_two);
 create index reports_reporter_id_idx on public.reports(reporter_id);
 create index guilds_owner_id_idx on public.guilds(owner_id);
 create index guild_members_user_id_idx on public.guild_members(user_id);
@@ -159,7 +170,17 @@ using (
 );
 create policy "Players create conversations"
 on public.conversations for insert to authenticated
-with check (created_by = (select auth.uid()));
+with check (
+  created_by = (select auth.uid())
+  and (
+    kind = 'group'
+    or (
+      participant_one is not null and participant_two is not null
+      and participant_one <> participant_two
+      and (select auth.uid()) in (participant_one, participant_two)
+    )
+  )
+);
 create policy "Players see their own conversation membership"
 on public.conversation_members for select to authenticated
 using (user_id = (select auth.uid()));
