@@ -266,11 +266,25 @@ function Workspace() {
       notify('Ta publication doit contenir entre 1 et 3 000 caractères.');
       return;
     }
-    const { error } = await supabase.from('posts').insert({ author_id: account.id, body });
+    const { data: created, error } = await supabase.from('posts')
+      .insert({ author_id: account.id, body })
+      .select('id, author_id, body, created_at')
+      .single();
     if (error) {
       notify('Publication non envoyée : ' + error.message);
       return;
     }
+    const { data: authorProfile } = await supabase.from('profiles')
+      .select('username, display_name')
+      .eq('user_id', account.id)
+      .maybeSingle();
+    const author = authorProfile?.display_name || authorProfile?.username || gamerName;
+    setCommunityPosts((previous) => [{
+      id: created.id, authorId: created.author_id, author,
+      avatar: author.slice(0, 1).toUpperCase(), color: 'cyan',
+      time: new Date(created.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }),
+      text: created.body, likes: 0, comments: 0, label: 'COMMUNAUTÉ'
+    }, ...previous.filter((post) => post.id !== created.id)]);
     setPostDraft('');
     setShowNewPost(false);
     notify('Publication envoyée à la communauté.');
