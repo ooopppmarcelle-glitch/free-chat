@@ -1,0 +1,186 @@
+import { useMemo, useState } from 'react';
+import {
+  MessageCircle, Users, Compass, Bell, Search, Plus, Send, Smile,
+  Paperclip, MoreHorizontal, Hash, ChevronDown, Gamepad2, ShieldCheck,
+  Sparkles, Settings, Menu, X, ArrowUpRight, Zap, Crown, Image,
+  CircleHelp, LogOut, CheckCheck, Mic, Phone, Video, UserPlus
+} from 'lucide-react';
+import { isSupabaseConfigured } from './lib/supabase.js';
+
+const initialChats = [
+  { id: 1, name: 'KAYZER', tag: 'Escouade principale', avatar: 'K', color: 'cyan', online: true, unread: 2, last: 'On lance une partie ce soir ?', time: '12:42' },
+  { id: 2, name: 'Mina FF', tag: 'Amie', avatar: 'M', color: 'violet', online: true, unread: 0, last: 'Bien joué pour la dernière game 🔥', time: '11:58' },
+  { id: 3, name: 'SQUAD 237', tag: 'Guilde · 18 joueurs', avatar: 'S', color: 'gold', online: false, unread: 0, last: 'DARK: rendez-vous à 20h', time: 'Hier' },
+  { id: 4, name: 'Noxx', tag: 'Joueur', avatar: 'N', color: 'pink', online: false, unread: 0, last: 'Tu as vu le nouvel événement ?', time: 'Hier' }
+];
+
+const initialMessages = {
+  1: [
+    { id: 1, from: 'KAYZER', text: 'Yo la team ! Vous êtes chauds pour ce soir ?', time: '12:34', mine: false },
+    { id: 2, from: 'Moi', text: 'Toujours prêt. On se retrouve dans le lobby.', time: '12:36', mine: true },
+    { id: 3, from: 'KAYZER', text: 'Parfait. Mina vient aussi.', time: '12:38', mine: false },
+    { id: 4, from: 'KAYZER', text: 'On lance une partie ce soir ?', time: '12:42', mine: false }
+  ],
+  2: [{ id: 1, from: 'Mina FF', text: 'Bien joué pour la dernière game 🔥', time: '11:58', mine: false }],
+  3: [{ id: 1, from: 'DARK', text: 'Rendez-vous à 20h pour le tournoi interne.', time: 'Hier', mine: false }],
+  4: [{ id: 1, from: 'Noxx', text: 'Tu as vu le nouvel événement ?', time: 'Hier', mine: false }]
+};
+
+const guilds = [
+  { name: 'SQUAD 237', members: '18 joueurs', status: 'Recrutement ouvert', color: 'gold', icon: 'S' },
+  { name: 'NIGHT RAIDERS', members: '42 joueurs', status: 'Guilde active', color: 'violet', icon: 'N' },
+  { name: 'CAMEROON ELITE', members: '27 joueurs', status: '3 joueurs en ligne', color: 'cyan', icon: 'C' }
+];
+
+const posts = [
+  { author: 'Mina FF', time: 'Il y a 18 min', avatar: 'M', color: 'violet', text: 'La meilleure sensation : une escouade qui joue ensemble et ne lâche rien. GG à tous !', likes: 24, comments: 6, label: 'COMMUNAUTÉ' },
+  { author: 'KAYZER', time: 'Il y a 1 h', avatar: 'K', color: 'cyan', text: 'Qui est chaud pour former une escouade ce week-end ? On cherche deux joueurs motivés.', likes: 13, comments: 9, label: 'RECRUTEMENT' }
+];
+
+function Avatar({ label, color = 'cyan', online = false, large = false }) {
+  return <span className={`avatar avatar-${color} ${large ? 'avatar-large' : ''}`}>{label}<i className={online ? 'online-dot' : 'offline-dot'} /></span>;
+}
+
+function App() {
+  const [section, setSection] = useState('messages');
+  const [activeChat, setActiveChat] = useState(1);
+  const [chats, setChats] = useState(initialChats);
+  const [messages, setMessages] = useState(initialMessages);
+  const [draft, setDraft] = useState('');
+  const [search, setSearch] = useState('');
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [liked, setLiked] = useState([]);
+  const [showNewGuild, setShowNewGuild] = useState(false);
+  const [guildName, setGuildName] = useState('');
+  const [localGuilds, setLocalGuilds] = useState(guilds);
+
+  const currentChat = chats.find((chat) => chat.id === activeChat) || chats[0];
+  const currentMessages = messages[activeChat] || [];
+  const filteredChats = useMemo(
+    () => chats.filter((chat) => chat.name.toLowerCase().includes(search.toLowerCase())),
+    [chats, search]
+  );
+
+  function notify(message) {
+    setNotice(message);
+    window.setTimeout(() => setNotice(''), 2600);
+  }
+
+  function sendMessage(event) {
+    event.preventDefault();
+    const text = draft.trim();
+    if (!text || !currentChat) return;
+    const nextMessage = { id: Date.now(), from: 'Moi', text, time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }), mine: true };
+    setMessages((previous) => ({ ...previous, [activeChat]: [...(previous[activeChat] || []), nextMessage] }));
+    setChats((previous) => previous.map((chat) => chat.id === activeChat ? { ...chat, last: text, time: 'À l’instant' } : chat));
+    setDraft('');
+  }
+
+  function createGuild(event) {
+    event.preventDefault();
+    const name = guildName.trim();
+    if (!name) return;
+    setLocalGuilds((previous) => [...previous, { name: name.toUpperCase(), members: '1 joueur', status: 'Nouvelle guilde', color: 'cyan', icon: name[0].toUpperCase() }]);
+    setGuildName('');
+    setShowNewGuild(false);
+    notify('Guilde créée dans cette démo.');
+  }
+
+  const navItems = [
+    { id: 'messages', label: 'Messages', icon: MessageCircle, count: 2 },
+    { id: 'guildes', label: 'Guildes', icon: Users },
+    { id: 'decouvrir', label: 'Découvrir', icon: Compass },
+    { id: 'profil', label: 'Mon profil', icon: Gamepad2 }
+  ];
+
+  return (
+    <div className="app-shell">
+      <div className="ambient ambient-one" /><div className="ambient ambient-two" />
+      <aside className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}>
+        <div className="brand">
+          <div className="brand-mark"><MessageCircle size={22} strokeWidth={2.5} /></div>
+          <div><div className="brand-name">FREE<span>CHAT</span></div><div className="brand-caption">ENTRE NOUS, LES GAMERS</div></div>
+          <button className="icon-button close-menu" onClick={() => setMobileMenu(false)} aria-label="Fermer le menu"><X size={19} /></button>
+        </div>
+        <div className="profile-mini">
+          <Avatar label="F" color="cyan" online large />
+          <div className="profile-mini-text"><strong>Farel</strong><span><i className="status-pulse" /> En ligne</span></div>
+          <button className="tiny-icon" onClick={() => setSection('profil')} aria-label="Ouvrir mon profil"><MoreHorizontal size={20} /></button>
+        </div>
+        <div className="side-label">ESPACE GAMER</div>
+        <nav className="side-nav">
+          {navItems.map(({ id, label, icon: Icon, count }) => (
+            <button key={id} className={`nav-item ${section === id ? 'nav-active' : ''}`} onClick={() => { setSection(id); setMobileMenu(false); }}>
+              <Icon size={19} /><span>{label}</span>{count ? <b className="nav-count">{count}</b> : null}
+            </button>
+          ))}
+        </nav>
+        <div className="side-divider" />
+        <div className="side-label side-label-row">TES GUILDES <button onClick={() => { setSection('guildes'); setShowNewGuild(true); }} aria-label="Créer une guilde"><Plus size={15} /></button></div>
+        <div className="guild-shortcuts">
+          {localGuilds.slice(0, 3).map((guild) => <button key={guild.name} onClick={() => setSection('guildes')}><span className={`guild-symbol symbol-${guild.color}`}>{guild.icon}</span><span>{guild.name}</span></button>)}
+        </div>
+        <div className="sidebar-bottom">
+          <div className="upgrade-card"><div className="upgrade-icon"><Sparkles size={17} /></div><strong>Ton univers gamer.</strong><p>Un espace pour jouer, échanger et progresser ensemble.</p><span>FREE CHAT STUDIO</span></div>
+          <button className="nav-item muted-nav" onClick={() => notify('Les paramètres arrivent dans une prochaine version.')}><Settings size={18} /><span>Paramètres</span></button>
+          <div className="sidebar-signature">Créé par <strong>Farel</strong> <span>✦</span></div>
+        </div>
+      </aside>
+
+      <main className="main-area">
+        <header className="topbar">
+          <button className="icon-button mobile-menu-button" onClick={() => setMobileMenu(true)} aria-label="Ouvrir le menu"><Menu size={21} /></button>
+          <div className="breadcrumb"><span>FREE CHAT</span><b>/</b>{navItems.find((item) => item.id === section)?.label || 'Messages'}</div>
+          <div className="top-actions"><div className="connection-pill"><i /> Communauté active</div><button className="icon-button notification-button" onClick={() => notify('Tu es à jour. Aucune nouvelle notification.')} aria-label="Notifications"><Bell size={19} /><i /></button><button className="top-avatar" onClick={() => setSection('profil')}>F</button></div>
+        </header>
+
+        {section === 'messages' && (
+          <div className="messenger-layout">
+            <section className="conversation-panel">
+              <div className="panel-heading"><div><div className="eyebrow">TON ESPACE DE COMMUNICATION</div><h1>Messages<span className="title-dot">.</span></h1></div><button className="square-action" onClick={() => notify('La recherche de joueurs sera bientôt disponible.')} aria-label="Nouveau message"><Plus size={19} /></button></div>
+              <div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher une discussion..." /><kbd>⌘ K</kbd></div>
+              <div className="filter-row"><span>RÉCENTES <b>{chats.length}</b></span><button onClick={() => setSearch('')}>Tout voir <ArrowUpRight size={13} /></button></div>
+              <div className="chat-list">
+                {filteredChats.map((chat) => <button key={chat.id} className={`chat-row ${activeChat === chat.id ? 'chat-selected' : ''}`} onClick={() => setActiveChat(chat.id)}>
+                  <Avatar label={chat.avatar} color={chat.color} online={chat.online} />
+                  <span className="chat-row-copy"><strong>{chat.name}</strong><small>{chat.last}</small></span>
+                  <span className="chat-meta"><small>{chat.time}</small>{chat.unread > 0 && <b>{chat.unread}</b>}</span>
+                </button>)}
+                {filteredChats.length === 0 && <div className="empty-search">Aucune discussion trouvée.</div>}
+              </div>
+              <div className="online-block"><div className="online-heading">JOUEURS EN LIGNE <span>12</span></div><div className="online-avatars"><Avatar label="K" color="cyan" online /><Avatar label="M" color="violet" online /><Avatar label="A" color="pink" online /><Avatar label="+" color="dark" /><span>Voir les joueurs</span></div></div>
+            </section>
+
+            <section className="chat-panel">
+              {currentChat ? <>
+                <div className="chat-header"><div className="chat-person"><Avatar label={currentChat.avatar} color={currentChat.color} online={currentChat.online} /><div><strong>{currentChat.name}</strong><span>{currentChat.online ? 'En ligne maintenant' : currentChat.tag}</span></div></div><div className="chat-tools"><button className="icon-button" onClick={() => notify('Les appels seront ajoutés après validation technique.')} aria-label="Appel audio"><Phone size={18} /></button><button className="icon-button" onClick={() => notify('Les appels vidéo seront ajoutés après validation technique.')} aria-label="Appel vidéo"><Video size={18} /></button><button className="icon-button" onClick={() => notify('Options de discussion à venir.')} aria-label="Plus d’options"><MoreHorizontal size={20} /></button></div></div>
+                <div className="chat-context"><span className="context-lock"><ShieldCheck size={14} /></span><span>Bienvenue dans ton espace de discussion. Respect et fair-play avant tout.</span></div>
+                <div className="messages-area"><div className="date-divider"><span>AUJOURD’HUI</span></div>
+                  {currentMessages.map((message) => <div key={message.id} className={`message-line ${message.mine ? 'message-mine' : ''}`}>
+                    {!message.mine && <Avatar label={currentChat.avatar} color={currentChat.color} />}
+                    <div className="message-content">{!message.mine && <strong>{message.from}</strong>}<div className="bubble">{message.text}</div><small>{message.time} {message.mine && <CheckCheck size={13} />}</small></div>
+                  </div>)}
+                </div>
+                <form className="composer" onSubmit={sendMessage}><div className="composer-tools"><button type="button" onClick={() => notify('Les pièces jointes arrivent dans une prochaine version.')} aria-label="Ajouter une pièce jointe"><Paperclip size={18} /></button><button type="button" onClick={() => notify('Les emojis arrivent bientôt.')} aria-label="Ajouter un emoji"><Smile size={18} /></button></div><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Écris ton message..." aria-label="Ton message" /><button className="send-button" type="submit" disabled={!draft.trim()} aria-label="Envoyer le message"><Send size={18} /></button></form>
+                <div className="composer-foot"><span>Sois cool. Joue fair-play.</span><span>FREE CHAT <b>✦</b></span></div>
+              </> : <div className="empty-chat">Sélectionne une discussion pour commencer.</div>}
+            </section>
+          </div>
+        )}
+
+        {section === 'guildes' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">JOUE ENSEMBLE</div><h1>Les guildes<span className="title-dot">.</span></h1><p>Rassemble ton escouade, partage tes stratégies et construis ta communauté.</p></div><button className="primary-button" onClick={() => setShowNewGuild(true)}><Plus size={17} /> Créer une guilde</button></div><div className="guild-grid">{localGuilds.map((guild) => <article className="guild-card" key={guild.name}><div className={`guild-emblem symbol-${guild.color}`}>{guild.icon}</div><div className="guild-card-info"><span className="eyebrow">GUILDE GAMER</span><h2>{guild.name}</h2><p><Users size={14} /> {guild.members}</p></div><div className="guild-card-footer"><span><i /> {guild.status}</span><button onClick={() => notify('La page détaillée de cette guilde arrive bientôt.')} aria-label={`Voir ${guild.name}`}><ArrowUpRight size={17} /></button></div></article>)}</div>{showNewGuild && <div className="modal-backdrop" onClick={() => setShowNewGuild(false)}><form className="modal-card" onSubmit={createGuild} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewGuild(false)}><X size={18} /></button><div className="eyebrow">NOUVELLE COMMUNAUTÉ</div><h2>Créer une guilde</h2><p>Donne un nom à ton escouade. Tu pourras personnaliser ses détails ensuite.</p><input autoFocus value={guildName} onChange={(event) => setGuildName(event.target.value)} placeholder="Ex. NIGHT WOLVES" maxLength={28} /><button className="primary-button" type="submit" disabled={!guildName.trim()}>Créer la guilde <ArrowUpRight size={16} /></button></form></div>}</section>}
+
+        {section === 'decouvrir' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">LE FEED DES JOUEURS</div><h1>Découvrir<span className="title-dot">.</span></h1><p>Les idées, les annonces et les moments de la communauté.</p></div><button className="primary-button" onClick={() => notify('La publication sera disponible dans une prochaine version.')}><Plus size={17} /> Publier</button></div><div className="feed-layout"><div className="feed-list">{posts.map((post) => <article className="post-card" key={post.author}><div className="post-head"><Avatar label={post.avatar} color={post.color} /><div><strong>{post.author}</strong><small>{post.time}</small></div><span className="post-tag">{post.label}</span></div><p>{post.text}</p><div className="post-actions"><button className={liked.includes(post.author) ? 'liked' : ''} onClick={() => setLiked((previous) => previous.includes(post.author) ? previous.filter((name) => name !== post.author) : [...previous, post.author])}>✦ {post.likes + (liked.includes(post.author) ? 1 : 0)} réactions</button><button onClick={() => notify('Les commentaires arrivent bientôt.')}>{post.comments} commentaires</button><button onClick={() => notify('Le partage sera bientôt disponible.')}>Partager</button></div></article>)}</div><aside className="community-aside"><div className="aside-card"><div className="aside-icon"><Zap size={19} /></div><span className="eyebrow">À LA UNE</span><h3>La communauté prend vie.</h3><p>Retrouve les joueurs, découvre les guildes et prépare ta prochaine escouade.</p></div><div className="aside-card mini-aside"><span className="eyebrow">ESPRIT GAMER</span><h3>Respect. Stratégie. Fair-play.</h3><p>Une bonne communauté commence par de bonnes attitudes.</p></div></aside></div></section>}
+
+        {section === 'profil' && <section className="content-page"><div className="eyebrow">IDENTITÉ GAMER</div><h1>Mon profil<span className="title-dot">.</span></h1><div className="profile-card"><div className="profile-cover"><div className="cover-glow" /></div><div className="profile-details"><Avatar label="F" color="cyan" large /><div className="profile-data"><h2>Farel <span className="verified-mark"><ShieldCheck size={15} /></span></h2><p>@farel · Joueur FREE CHAT</p><span className="profile-level"><Crown size={14} /> Niveau 1 · Nouveau joueur</span></div><button className="secondary-button" onClick={() => notify('La modification du profil sera bientôt disponible.')}>Modifier le profil</button></div><div className="profile-stats"><div><strong>01</strong><span>GUILDE</span></div><div><strong>04</strong><span>DISCUSSIONS</span></div><div><strong>01</strong><span>NIVEAU</span></div></div><div className="profile-note"><Sparkles size={17} /><span>Ton identité gamer évoluera au fil de tes aventures sur FREE CHAT.</span></div></div><div className="disclaimer"><ShieldCheck size={17} /><span>FREE CHAT est un projet indépendant. Les identifiants et statistiques de compte Free Fire ne sont pas vérifiés par Garena.</span></div></section>}
+        <footer className="app-footer"><span>FREE CHAT <b>✦</b> FREE CHAT STUDIO</span><span>Une communauté. Une escouade. Ton univers.</span></footer>
+      </main>
+      {notice && <div className="toast"><Sparkles size={16} />{notice}</div>}
+      {mobileMenu && <button className="mobile-scrim" onClick={() => setMobileMenu(false)} aria-label="Fermer le menu" />}
+      {!isSupabaseConfigured && <div className="demo-indicator"><span /> MODE APERÇU</div>}
+    </div>
+  );
+}
+
+export default App;
