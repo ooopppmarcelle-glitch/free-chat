@@ -66,7 +66,6 @@ function Workspace() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [showChatOnMobile, setShowChatOnMobile] = useState(false);
   const [notice, setNotice] = useState('');
-  const [liked, setLiked] = useState([]);
   const [communityPosts, setCommunityPosts] = useState(initialPosts);
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [showNewPost, setShowNewPost] = useState(false);
