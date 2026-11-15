@@ -33,7 +33,7 @@ const guilds = [
   { name: 'CAMEROON ELITE', members: '27 joueurs', status: '3 joueurs en ligne', color: 'cyan', icon: 'C' }
 ];
 
-const posts = [
+const initialPosts = [
   { author: 'Mina FF', time: 'Il y a 18 min', avatar: 'M', color: 'violet', text: 'La meilleure sensation : une escouade qui joue ensemble et ne lâche rien. GG à tous !', likes: 24, comments: 6, label: 'COMMUNAUTÉ' },
   { author: 'KAYZER', time: 'Il y a 1 h', avatar: 'K', color: 'cyan', text: 'Qui est chaud pour former une escouade ce week-end ? On cherche deux joueurs motivés.', likes: 13, comments: 9, label: 'RECRUTEMENT' }
 ];
@@ -67,6 +67,10 @@ function Workspace() {
   const [showChatOnMobile, setShowChatOnMobile] = useState(false);
   const [notice, setNotice] = useState('');
   const [liked, setLiked] = useState([]);
+  const [communityPosts, setCommunityPosts] = useState(initialPosts);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [showNewPost, setShowNewPost] = useState(false);
+  const [postDraft, setPostDraft] = useState('');
   const [showNewGuild, setShowNewGuild] = useState(false);
   const [guildName, setGuildName] = useState('');
   const [localGuilds, setLocalGuilds] = useState(guilds);
@@ -206,6 +210,72 @@ function Workspace() {
     loadGuilds();
     return () => { active = false; };
   }, [account?.id]);
+
+  useEffect(() => {
+    if (!account?.id || !supabase) {
+      setCommunityPosts(initialPosts);
+      return undefined;
+    }
+    let active = true;
+    async function loadPosts() {
+      setLoadingPosts(true);
+      const { data, error } = await supabase.from('posts')
+        .select('id, author_id, body, created_at')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (!active) return;
+      if (error) {
+        notify('Impossible de charger les publications : ' + error.message);
+        setLoadingPosts(false);
+        return;
+      }
+      const authorIds = [...new Set((data || []).map((post) => post.author_id))];
+      const { data: profiles, error: profilesError } = authorIds.length
+        ? await supabase.from('profiles').select('user_id, username, display_name, avatar_url').in('user_id', authorIds)
+        : { data: [], error: null };
+      if (!active) return;
+      if (profilesError) notify('Profils des auteurs indisponibles : ' + profilesError.message);
+      const profileById = new Map((profiles || []).map((profile) => [profile.user_id, profile]));
+      setCommunityPosts((data || []).map((post) => {
+        const profile = profileById.get(post.author_id);
+        const author = profile?.display_name || profile?.username || 'Joueur';
+        return {
+          id: post.id, authorId: post.author_id, author,
+          avatar: author.slice(0, 1).toUpperCase(), color: 'cyan',
+          time: new Date(post.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }),
+          text: post.body, likes: 0, comments: 0, label: 'COMMUNAUTÉ'
+        };
+      }));
+      setLoadingPosts(false);
+    }
+    loadPosts();
+    const channel = supabase.channel('free-chat-community-posts')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => { loadPosts(); })
+      .subscribe();
+    return () => { active = false; supabase.removeChannel(channel); };
+  }, [account?.id]);
+
+  async function createPost(event) {
+    event.preventDefault();
+    const body = postDraft.trim();
+    if (!account?.id || !supabase) {
+      notify('Connecte-toi pour publier dans la communauté.');
+      setShowNewPost(false);
+      return;
+    }
+    if (!body || body.length > 3000) {
+      notify('Ta publication doit contenir entre 1 et 3 000 caractères.');
+      return;
+    }
+    const { error } = await supabase.from('posts').insert({ author_id: account.id, body });
+    if (error) {
+      notify('Publication non envoyée : ' + error.message);
+      return;
+    }
+    setPostDraft('');
+    setShowNewPost(false);
+    notify('Publication envoyée à la communauté.');
+  }
 
   async function joinGuild(guild) {
     if (!account?.id || !supabase || !guild.id || guild.joined) return;
@@ -359,7 +429,7 @@ function Workspace() {
         {showNewChat && <div className="modal-backdrop" onClick={() => setShowNewChat(false)}><form className="modal-card" onSubmit={startDirectConversation} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewChat(false)}><X size={18} /></button><div className="eyebrow">NOUVELLE DISCUSSION</div><h2>Écrire à un joueur</h2><p>Recherche son pseudo FREE CHAT exact pour démarrer une conversation privée.</p><input autoFocus value={newPlayerUsername} onChange={(event) => setNewPlayerUsername(event.target.value)} placeholder="Pseudo du joueur" maxLength={24} /><button className="primary-button" type="submit" disabled={!newPlayerUsername.trim()}>Démarrer la discussion <ArrowUpRight size={16} /></button></form></div>}
         {section === 'guildes' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">JOUE ENSEMBLE</div><h1>Les guildes<span className="title-dot">.</span></h1><p>Rassemble ton escouade, partage tes stratégies et construis ta communauté.</p></div><button className="primary-button" onClick={() => setShowNewGuild(true)}><Plus size={17} /> Créer une guilde</button></div><div className="guild-grid">{localGuilds.map((guild) => <article className="guild-card" key={guild.id || guild.name}><div className={`guild-emblem symbol-${guild.color}`}>{guild.icon}</div><div className="guild-card-info"><span className="eyebrow">GUILDE GAMER</span><h2>{guild.name}</h2><p><Users size={14} /> {guild.members}</p>{guild.description && <p>{guild.description}</p>}</div><div className="guild-card-footer"><span><i /> {guild.status}</span>{account && guild.id && !guild.joined && !guild.owner ? <button onClick={() => joinGuild(guild)} aria-label={`Rejoindre ${guild.name}`}><UserPlus size={17} /></button> : <button onClick={() => notify(guild.owner ? 'Tu es chef de cette guilde.' : guild.joined ? 'Tu es membre de cette guilde.' : 'Les détails de cette guilde arrivent bientôt.')} aria-label={`Voir ${guild.name}`}><ArrowUpRight size={17} /></button>}</div></article>)}{loadingGuilds && <p>Chargement des guildes…</p>}{!loadingGuilds && account && localGuilds.length === 0 && <p>Aucune guilde publique pour le moment. Crée la première.</p>}</div>{showNewGuild && <div className="modal-backdrop" onClick={() => setShowNewGuild(false)}><form className="modal-card" onSubmit={createGuild} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewGuild(false)}><X size={18} /></button><div className="eyebrow">NOUVELLE COMMUNAUTÉ</div><h2>Créer une guilde</h2><p>Donne un nom à ton escouade. Tu pourras personnaliser ses détails ensuite.</p><input autoFocus value={guildName} onChange={(event) => setGuildName(event.target.value)} placeholder="Ex. NIGHT WOLVES" maxLength={32} /><textarea value={guildDescription} onChange={(event) => setGuildDescription(event.target.value)} placeholder="Description de ta guilde (facultatif)" maxLength={500} /><button className="primary-button" type="submit" disabled={guildName.trim().length < 3}>Créer la guilde <ArrowUpRight size={16} /></button></form></div>}</section>}
 
-        {section === 'decouvrir' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">LE FEED DES JOUEURS</div><h1>Découvrir<span className="title-dot">.</span></h1><p>Les idées, les annonces et les moments de la communauté.</p></div><button className="primary-button" onClick={() => notify('La publication sera disponible dans une prochaine version.')}><Plus size={17} /> Publier</button></div><div className="feed-layout"><div className="feed-list">{posts.map((post) => <article className="post-card" key={post.author}><div className="post-head"><Avatar label={post.avatar} color={post.color} /><div><strong>{post.author}</strong><small>{post.time}</small></div><span className="post-tag">{post.label}</span></div><p>{post.text}</p><div className="post-actions"><button className={liked.includes(post.author) ? 'liked' : ''} onClick={() => setLiked((previous) => previous.includes(post.author) ? previous.filter((name) => name !== post.author) : [...previous, post.author])}>✦ {post.likes + (liked.includes(post.author) ? 1 : 0)} réactions</button><button onClick={() => notify('Les commentaires arrivent bientôt.')}>{post.comments} commentaires</button><button onClick={() => notify('Le partage sera bientôt disponible.')}>Partager</button></div></article>)}</div><aside className="community-aside"><div className="aside-card"><div className="aside-icon"><Zap size={19} /></div><span className="eyebrow">À LA UNE</span><h3>La communauté prend vie.</h3><p>Retrouve les joueurs, découvre les guildes et prépare ta prochaine escouade.</p></div><div className="aside-card mini-aside"><span className="eyebrow">ESPRIT GAMER</span><h3>Respect. Stratégie. Fair-play.</h3><p>Une bonne communauté commence par de bonnes attitudes.</p></div></aside></div></section>}
+        {section === 'decouvrir' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">LE FEED DES JOUEURS</div><h1>Découvrir<span className="title-dot">.</span></h1><p>Les idées, les annonces et les moments de la communauté.</p></div><button className="primary-button" onClick={() => account ? setShowNewPost(true) : notify('Connecte-toi pour publier dans la communauté.')}><Plus size={17} /> Publier</button></div><div className="feed-layout"><div className="feed-list">{communityPosts.map((post) => <article className="post-card" key={post.id || post.author}><div className="post-head"><Avatar label={post.avatar} color={post.color} /><div><strong>{post.author}</strong><small>{post.time}</small></div><span className="post-tag">{post.label}</span></div><p>{post.text}</p><div className="post-actions"><button onClick={() => notify('Les réactions seront ajoutées dans une prochaine version.')}>✦ Réactions</button><button onClick={() => notify('Les commentaires arrivent bientôt.')}>Commentaires</button><button onClick={() => notify('Le partage sera bientôt disponible.')}>Partager</button></div></article>)}</div><aside className="community-aside"><div className="aside-card"><div className="aside-icon"><Zap size={19} /></div><span className="eyebrow">À LA UNE</span><h3>La communauté prend vie.</h3><p>Retrouve les joueurs, découvre les guildes et prépare ta prochaine escouade.</p></div><div className="aside-card mini-aside"><span className="eyebrow">ESPRIT GAMER</span><h3>Respect. Stratégie. Fair-play.</h3><p>Une bonne communauté commence par de bonnes attitudes.</p></div></aside></div>{loadingPosts && <p>Chargement des publications…</p>}{!loadingPosts && account && communityPosts.length === 0 && <p>Aucune publication pour le moment. Lance la conversation !</p>}</div>{showNewPost && <div className="modal-backdrop" onClick={() => setShowNewPost(false)}><form className="modal-card" onSubmit={createPost} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewPost(false)}><X size={18} /></button><div className="eyebrow">PRENDRE LA PAROLE</div><h2>Nouvelle publication</h2><p>Partage une idée, une annonce ou un moment avec les joueurs.</p><textarea autoFocus value={postDraft} onChange={(event) => setPostDraft(event.target.value)} placeholder="Quoi de neuf dans ta communauté ?" maxLength={3000} /><small>{postDraft.length}/3000</small><button className="primary-button" type="submit" disabled={!postDraft.trim()}>Publier <ArrowUpRight size={16} /></button></form></div>}</section>}
 
         {section === 'profil' && <section className="content-page"><div className="eyebrow">IDENTITÉ GAMER</div><h1>Mon profil<span className="title-dot">.</span></h1><div className="profile-card"><div className="profile-cover"><div className="cover-glow" /></div><div className="profile-details"><Avatar label="F" color="cyan" large /><div className="profile-data"><h2>{gamerName} <span className="verified-mark"><ShieldCheck size={15} /></span></h2><p>{gamerTag} · Joueur FREE CHAT</p><span className="profile-level"><Crown size={14} /> Niveau 1 · Nouveau joueur</span></div><button className="secondary-button" onClick={() => notify('La modification du profil sera bientôt disponible.')}>Modifier le profil</button></div><div className="profile-stats"><div><strong>01</strong><span>GUILDE</span></div><div><strong>04</strong><span>DISCUSSIONS</span></div><div><strong>01</strong><span>NIVEAU</span></div></div><div className="profile-note"><Sparkles size={17} /><span>Ton identité gamer évoluera au fil de tes aventures sur FREE CHAT.</span></div></div><div className="disclaimer"><ShieldCheck size={17} /><span>FREE CHAT est un projet indépendant. Les identifiants et statistiques de compte Free Fire ne sont pas vérifiés par Garena.</span></div></section>}
         <footer className="app-footer"><span>FREE CHAT <b>✦</b> FREE CHAT STUDIO</span><span>Une communauté. Une escouade. Ton univers.</span></footer>
