@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight, Gamepad2, Mail, Lock, User, ShieldCheck, Sparkles } from 'lucide-react';
 import { supabase } from './lib/supabase.js';
 import './auth.css';
@@ -15,7 +15,7 @@ export default function AuthGate({ children }) {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
 
-  useState(() => {
+  useEffect(() => {
     let active = true;
     supabase.auth.getSession().then(({ data, error: sessionError }) => {
       if (!active) return;
