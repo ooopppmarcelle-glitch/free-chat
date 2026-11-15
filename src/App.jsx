@@ -6,6 +6,7 @@ import {
   CircleHelp, LogOut, CheckCheck, Mic, Phone, Video, UserPlus
 } from 'lucide-react';
 import { isSupabaseConfigured } from './lib/supabase.js';
+import AuthGate from './AuthGate.jsx';
 
 const initialChats = [
   { id: 1, name: 'KAYZER', tag: 'Escouade principale', avatar: 'K', color: 'cyan', online: true, unread: 2, last: 'On lance une partie ce soir ?', time: '12:42' },
@@ -41,7 +42,7 @@ function Avatar({ label, color = 'cyan', online = false, large = false }) {
   return <span className={`avatar avatar-${color} ${large ? 'avatar-large' : ''}`}>{label}<i className={online ? 'online-dot' : 'offline-dot'} /></span>;
 }
 
-function App() {
+function Workspace() {
   const [section, setSection] = useState('messages');
   const [lightMode, setLightMode] = useState(false);
   const [activeChat, setActiveChat] = useState(1);
@@ -180,9 +181,13 @@ function App() {
       </main>
       {notice && <div className="toast"><Sparkles size={16} />{notice}</div>}
       {mobileMenu && <button className="mobile-scrim" onClick={() => setMobileMenu(false)} aria-label="Fermer le menu" />}
-      {!isSupabaseConfigured && <div className="demo-indicator"><span /> MODE APERÇU</div>}
+      <div className="demo-indicator"><span /> MODE APERÇU · données locales non synchronisées</div>
     </div>
   );
+}
+
+function App() {
+  return isSupabaseConfigured ? <AuthGate><Workspace /></AuthGate> : <Workspace />;
 }
 
 export default App;
