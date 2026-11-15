@@ -90,3 +90,15 @@
 .theme-light .admin-report>p{color:#536781}
 .theme-light .admin-report-top strong{color:#536781}
 @media(max-width:760px){.admin-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-section-heading{align-items:flex-start;gap:8px;flex-direction:column}.admin-report-actions button{flex:1 1 auto}}
+
+.modal-card textarea{width:100%;min-height:105px;resize:vertical;border-radius:9px;border:1px solid #2a3a51;background:#091321;color:#fff;padding:11px 12px;margin:10px 0 8px;outline:none;font:inherit;font-size:11px;line-height:1.55}
+.modal-card textarea:focus{border-color:var(--cyan)}
+.modal-card>small{display:block;text-align:right;color:#8293aa;font-size:9px;margin-bottom:14px}
+.theme-light .modal-card textarea{background:#f7faff;color:#1b2b43;border-color:rgba(38,61,91,.17)}
+.admin-player-list{display:grid;gap:8px;margin-bottom:24px}
+.admin-player-row{display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:rgba(15,25,42,.62)}
+.admin-player-row>div{display:grid;gap:3px}
+.admin-player-row strong{font-size:10px;color:#dce8f7}
+.admin-player-row small{font-size:8px;color:#8293aa}
+.theme-light .admin-player-row{background:#fff;border-color:rgba(38,61,91,.13)}
+.theme-light .admin-player-row strong{color:#1b2b43}
