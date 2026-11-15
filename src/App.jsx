@@ -70,6 +70,8 @@ function Workspace() {
   const [showNewGuild, setShowNewGuild] = useState(false);
   const [guildName, setGuildName] = useState('');
   const [localGuilds, setLocalGuilds] = useState(guilds);
+  const [guildDescription, setGuildDescription] = useState('');
+  const [loadingGuilds, setLoadingGuilds] = useState(false);
 
 
   useEffect(() => {
@@ -176,6 +178,43 @@ function Workspace() {
     }));
   }
 
+
+  useEffect(() => {
+    if (!account?.id || !supabase) return;
+    let active = true;
+    async function loadGuilds() {
+      setLoadingGuilds(true);
+      const { data, error } = await supabase.from('guilds')
+        .select('id, name, description, owner_id, is_public, created_at')
+        .eq('is_public', true).order('created_at', { ascending: false });
+      if (!active) return;
+      if (error) { notify('Impossible de charger les guildes : ' + error.message); setLoadingGuilds(false); return; }
+      const ids = (data || []).map((guild) => guild.id);
+      const { data: memberships } = ids.length
+        ? await supabase.from('guild_members').select('guild_id').eq('user_id', account.id).in('guild_id', ids)
+        : { data: [] };
+      const joined = new Set((memberships || []).map((row) => row.guild_id));
+      setLocalGuilds((data || []).map((guild) => ({
+        id: guild.id, name: guild.name, description: guild.description,
+        members: guild.owner_id === account.id ? 'Ta guilde' : (joined.has(guild.id) ? 'Tu es membre' : 'Guilde publique'),
+        status: joined.has(guild.id) || guild.owner_id === account.id ? 'Tu fais partie de cette guilde' : 'Rejoindre',
+        color: 'cyan', icon: guild.name.slice(0,1).toUpperCase(),
+        joined: joined.has(guild.id) || guild.owner_id === account.id, owner: guild.owner_id === account.id
+      })));
+      setLoadingGuilds(false);
+    }
+    loadGuilds();
+    return () => { active = false; };
+  }, [account?.id]);
+
+  async function joinGuild(guild) {
+    if (!account?.id || !supabase || !guild.id || guild.joined) return;
+    const { error } = await supabase.from('guild_members').insert({ guild_id: guild.id, user_id: account.id, member_role: 'member' });
+    if (error) { notify(error.code === '23505' ? 'Tu es déjà membre de cette guilde.' : 'Impossible de rejoindre : ' + error.message); return; }
+    setLocalGuilds((items) => items.map((item) => item.id === guild.id ? { ...item, joined: true, members: 'Tu es membre', status: 'Tu fais partie de cette guilde' } : item));
+    notify('Tu as rejoint ' + guild.name + '.');
+  }
+
   const currentChat = chats.find((chat) => chat.id === activeChat) || chats[0];
   const currentMessages = messages[activeChat] || [];
   const filteredChats = useMemo(
@@ -210,13 +249,27 @@ function Workspace() {
     setDraft('');
   }
 
-  function createGuild(event) {
+  async function createGuild(event) {
     event.preventDefault();
     const name = guildName.trim();
-    if (!name) return;
-    setLocalGuilds((previous) => [...previous, { name: name.toUpperCase(), members: '1 joueur', status: 'Nouvelle guilde', color: 'cyan', icon: name[0].toUpperCase() }]);
-    setGuildName('');
-    setShowNewGuild(false);
+    const description = guildDescription.trim();
+    if (name.length < 3 || name.length > 32) { notify('Le nom doit contenir entre 3 et 32 caractères.'); return; }
+    if (account?.id && supabase) {
+      const { data: created, error } = await supabase.from('guilds').insert({
+        name: name.toUpperCase(), description, owner_id: account.id, is_public: true
+      }).select('id, name, description, owner_id').single();
+      if (error) { notify('Création impossible : ' + error.message); return; }
+      const { error: memberError } = await supabase.from('guild_members').insert({
+        guild_id: created.id, user_id: account.id, member_role: 'member'
+      });
+      if (memberError) { notify('Guilde créée, mais adhésion du chef non enregistrée : ' + memberError.message); return; }
+      setLocalGuilds((items) => [{ id: created.id, name: created.name, description: created.description, members: 'Ta guilde', status: 'Tu fais partie de cette guilde', color: 'cyan', icon: created.name[0], joined: true, owner: true }, ...items]);
+      setGuildName(''); setGuildDescription(''); setShowNewGuild(false);
+      notify('Ta guilde a été créée.');
+      return;
+    }
+    setLocalGuilds((previous) => [...previous, { name: name.toUpperCase(), description, members: '1 joueur', status: 'Nouvelle guilde', color: 'cyan', icon: name[0].toUpperCase() }]);
+    setGuildName(''); setGuildDescription(''); setShowNewGuild(false);
     notify('Guilde créée dans cette démo.');
   }
 
@@ -304,7 +357,7 @@ function Workspace() {
         )}
 
         {showNewChat && <div className="modal-backdrop" onClick={() => setShowNewChat(false)}><form className="modal-card" onSubmit={startDirectConversation} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewChat(false)}><X size={18} /></button><div className="eyebrow">NOUVELLE DISCUSSION</div><h2>Écrire à un joueur</h2><p>Recherche son pseudo FREE CHAT exact pour démarrer une conversation privée.</p><input autoFocus value={newPlayerUsername} onChange={(event) => setNewPlayerUsername(event.target.value)} placeholder="Pseudo du joueur" maxLength={24} /><button className="primary-button" type="submit" disabled={!newPlayerUsername.trim()}>Démarrer la discussion <ArrowUpRight size={16} /></button></form></div>}
-        {section === 'guildes' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">JOUE ENSEMBLE</div><h1>Les guildes<span className="title-dot">.</span></h1><p>Rassemble ton escouade, partage tes stratégies et construis ta communauté.</p></div><button className="primary-button" onClick={() => setShowNewGuild(true)}><Plus size={17} /> Créer une guilde</button></div><div className="guild-grid">{localGuilds.map((guild) => <article className="guild-card" key={guild.name}><div className={`guild-emblem symbol-${guild.color}`}>{guild.icon}</div><div className="guild-card-info"><span className="eyebrow">GUILDE GAMER</span><h2>{guild.name}</h2><p><Users size={14} /> {guild.members}</p></div><div className="guild-card-footer"><span><i /> {guild.status}</span><button onClick={() => notify('La page détaillée de cette guilde arrive bientôt.')} aria-label={`Voir ${guild.name}`}><ArrowUpRight size={17} /></button></div></article>)}</div>{showNewGuild && <div className="modal-backdrop" onClick={() => setShowNewGuild(false)}><form className="modal-card" onSubmit={createGuild} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewGuild(false)}><X size={18} /></button><div className="eyebrow">NOUVELLE COMMUNAUTÉ</div><h2>Créer une guilde</h2><p>Donne un nom à ton escouade. Tu pourras personnaliser ses détails ensuite.</p><input autoFocus value={guildName} onChange={(event) => setGuildName(event.target.value)} placeholder="Ex. NIGHT WOLVES" maxLength={28} /><button className="primary-button" type="submit" disabled={!guildName.trim()}>Créer la guilde <ArrowUpRight size={16} /></button></form></div>}</section>}
+        {section === 'guildes' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">JOUE ENSEMBLE</div><h1>Les guildes<span className="title-dot">.</span></h1><p>Rassemble ton escouade, partage tes stratégies et construis ta communauté.</p></div><button className="primary-button" onClick={() => setShowNewGuild(true)}><Plus size={17} /> Créer une guilde</button></div><div className="guild-grid">{localGuilds.map((guild) => <article className="guild-card" key={guild.id || guild.name}><div className={`guild-emblem symbol-${guild.color}`}>{guild.icon}</div><div className="guild-card-info"><span className="eyebrow">GUILDE GAMER</span><h2>{guild.name}</h2><p><Users size={14} /> {guild.members}</p>{guild.description && <p>{guild.description}</p>}</div><div className="guild-card-footer"><span><i /> {guild.status}</span>{account && guild.id && !guild.joined && !guild.owner ? <button onClick={() => joinGuild(guild)} aria-label={`Rejoindre ${guild.name}`}><UserPlus size={17} /></button> : <button onClick={() => notify(guild.owner ? 'Tu es chef de cette guilde.' : guild.joined ? 'Tu es membre de cette guilde.' : 'Les détails de cette guilde arrivent bientôt.')} aria-label={`Voir ${guild.name}`}><ArrowUpRight size={17} /></button>}</div></article>)}{loadingGuilds && <p>Chargement des guildes…</p>}{!loadingGuilds && account && localGuilds.length === 0 && <p>Aucune guilde publique pour le moment. Crée la première.</p>}</div>{showNewGuild && <div className="modal-backdrop" onClick={() => setShowNewGuild(false)}><form className="modal-card" onSubmit={createGuild} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewGuild(false)}><X size={18} /></button><div className="eyebrow">NOUVELLE COMMUNAUTÉ</div><h2>Créer une guilde</h2><p>Donne un nom à ton escouade. Tu pourras personnaliser ses détails ensuite.</p><input autoFocus value={guildName} onChange={(event) => setGuildName(event.target.value)} placeholder="Ex. NIGHT WOLVES" maxLength={32} /><textarea value={guildDescription} onChange={(event) => setGuildDescription(event.target.value)} placeholder="Description de ta guilde (facultatif)" maxLength={500} /><button className="primary-button" type="submit" disabled={guildName.trim().length < 3}>Créer la guilde <ArrowUpRight size={16} /></button></form></div>}</section>}
 
         {section === 'decouvrir' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">LE FEED DES JOUEURS</div><h1>Découvrir<span className="title-dot">.</span></h1><p>Les idées, les annonces et les moments de la communauté.</p></div><button className="primary-button" onClick={() => notify('La publication sera disponible dans une prochaine version.')}><Plus size={17} /> Publier</button></div><div className="feed-layout"><div className="feed-list">{posts.map((post) => <article className="post-card" key={post.author}><div className="post-head"><Avatar label={post.avatar} color={post.color} /><div><strong>{post.author}</strong><small>{post.time}</small></div><span className="post-tag">{post.label}</span></div><p>{post.text}</p><div className="post-actions"><button className={liked.includes(post.author) ? 'liked' : ''} onClick={() => setLiked((previous) => previous.includes(post.author) ? previous.filter((name) => name !== post.author) : [...previous, post.author])}>✦ {post.likes + (liked.includes(post.author) ? 1 : 0)} réactions</button><button onClick={() => notify('Les commentaires arrivent bientôt.')}>{post.comments} commentaires</button><button onClick={() => notify('Le partage sera bientôt disponible.')}>Partager</button></div></article>)}</div><aside className="community-aside"><div className="aside-card"><div className="aside-icon"><Zap size={19} /></div><span className="eyebrow">À LA UNE</span><h3>La communauté prend vie.</h3><p>Retrouve les joueurs, découvre les guildes et prépare ta prochaine escouade.</p></div><div className="aside-card mini-aside"><span className="eyebrow">ESPRIT GAMER</span><h3>Respect. Stratégie. Fair-play.</h3><p>Une bonne communauté commence par de bonnes attitudes.</p></div></aside></div></section>}
 
