@@ -69,7 +69,7 @@ Le projet ne contient actuellement aucun utilisateur : `auth.users = 0`, `profil
 5. Attendre la fin du job **build**.
 6. Une coche verte signifie que `npm install` et `npm run build` ont réussi pour le commit affiché. Une croix rouge signifie qu'il faut ouvrir le job et lire l'étape en erreur.
 
-La compilation doit être vérifiée sur le dernier commit, pas sur un ancien run. Le workflow est déclenché automatiquement à chaque push sur `main`. Le dernier commit de rapport visible dans le dépôt est `750e698a515a49156cc13562d30c145a31e6a4f0`; vérifie que l'exécution sélectionnée correspond à un commit plus récent ou égal à celui-ci.
+La compilation doit être vérifiée sur le dernier commit, pas sur un ancien run. Le workflow est déclenché automatiquement à chaque push sur `main`. Le workflow accepte aussi un lancement manuel depuis l'onglet Actions grâce à l'événement `workflow_dispatch`.
 
 ## Prochaines actions obligatoires
 
