@@ -25,8 +25,8 @@ FREE CHAT veut offrir aux joueurs un endroit où discuter, retrouver leur escoua
 | **Découvrir** | Publications et vie communautaire | Aperçu interactif |
 | **Profil gamer** | Identité et progression | Aperçu interactif |
 | **PWA** | Installation sur mobile et desktop | Base ajoutée |
-| **Comptes & sécurité** | Authentification, règles d'accès et modération | À connecter |
-| **Temps réel** | Messages et présence synchronisés | À construire |
+| **Comptes & sécurité** | Authentification, règles d'accès et modération | Schéma RLS créé; interface à connecter |
+| **Temps réel** | Messages et présence synchronisés | Tables créées; synchronisation à connecter |
 
 > Les données visibles dans l'aperçu sont fictives et locales au navigateur. Elles ne sont pas encore enregistrées dans un compte ni synchronisées entre joueurs.
 
@@ -72,6 +72,10 @@ VITE_SUPABASE_ANON_KEY=
 Laisse-les vides pour consulter l'aperçu local. Pour connecter un projet Supabase, renseigne uniquement l'URL et la clé publique anon/publishable. **Ne place jamais une clé `service_role` dans le frontend ou dans GitHub.**
 
 Les politiques RLS devront être définies et testées avant d'activer les données personnelles ou les échanges privés.
+
+## 🗄️ Base de données Supabase
+
+Le premier schéma de données est appliqué au projet Supabase et conservé dans [`supabase/schema.sql`](supabase/schema.sql). Il couvre les profils, guildes, membres, conversations, messages, publications et signalements. Les huit tables ont la Row Level Security (RLS) activée; les politiques limitent notamment les messages aux membres de chaque conversation. Les règles devront être testées avec plusieurs comptes avant l'ouverture publique.
 
 ## 🛡️ Sécurité et transparence
 
