@@ -74,6 +74,8 @@ create table public.reports (
   created_at timestamptz not null default now()
 );
 
+create index conversations_created_by_idx on public.conversations(created_by);
+create index reports_reporter_id_idx on public.reports(reporter_id);
 create index guilds_owner_id_idx on public.guilds(owner_id);
 create index guild_members_user_id_idx on public.guild_members(user_id);
 create index conversation_members_user_id_idx on public.conversation_members(user_id);
@@ -224,7 +226,7 @@ create policy "Players and moderators view reports"
 on public.reports for select to authenticated
 using (
   reporter_id = (select auth.uid())
-  or (auth.jwt()->'app_metadata'->>'role') in ('owner','admin','moderator')
+  or ((select auth.jwt())->'app_metadata'->>'role') in ('owner','admin','moderator')
 );
 create policy "Moderators update report status"
 on public.reports for update to authenticated
