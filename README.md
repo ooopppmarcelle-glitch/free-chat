@@ -86,7 +86,7 @@ Le schéma appliqué au projet Supabase est conservé dans [`supabase/schema.sql
 
 ## 📋 Rapport de vérification
 
-Le suivi détaillé des contrôles, limites connues et étapes restantes est publié dans [le rapport de vérification](docs/rapport-de-verification.md). La procédure d'attribution du rôle propriétaire est décrite dans [OWNER_SETUP.md](docs/OWNER_SETUP.md).
+Le suivi détaillé des contrôles, limites connues et étapes restantes est publié dans [le rapport de vérification](docs/rapport-de-verification.md). La procédure d'attribution du rôle propriétaire est décrite dans [OWNER_SETUP.md](docs/OWNER_SETUP.md), et les essais multi-comptes dans [TEST_PLAN.md](docs/TEST_PLAN.md).
 
 ## 🗺️ Feuille de route
 
