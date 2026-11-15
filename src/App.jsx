@@ -426,6 +426,8 @@ function Workspace() {
 
   const currentChat = chats.find((chat) => chat.id === activeChat) || chats[0];
   const currentMessages = messages[activeChat] || [];
+  const myGuildCount = localGuilds.filter((guild) => guild.joined || guild.owner).length;
+  const myPostCount = communityPosts.filter((post) => post.authorId === account?.id).length;
   const filteredChats = useMemo(
     () => chats.filter((chat) => chat.name.toLowerCase().includes(search.toLowerCase())),
     [chats, search]
@@ -562,7 +564,7 @@ function Workspace() {
   }
 
   const navItems = [
-    { id: 'messages', label: 'Messages', icon: MessageCircle, count: 2 },
+    { id: 'messages', label: 'Messages', icon: MessageCircle },
     { id: 'guildes', label: 'Guildes', icon: Users },
     { id: 'decouvrir', label: 'Découvrir', icon: Compass },
     { id: 'profil', label: 'Mon profil', icon: Gamepad2 },
@@ -585,9 +587,9 @@ function Workspace() {
         </div>
         <div className="side-label">ESPACE GAMER</div>
         <nav className="side-nav">
-          {navItems.map(({ id, label, icon: Icon, count }) => (
+          {navItems.map(({ id, label, icon: Icon }) => (
             <button key={id} className={`nav-item ${section === id ? 'nav-active' : ''}`} onClick={() => { setSection(id); setMobileMenu(false); setShowChatOnMobile(false); }}>
-              <Icon size={19} /><span>{label}</span>{count ? <b className="nav-count">{count}</b> : null}
+              <Icon size={19} /><span>{label}</span>
             </button>
           ))}
         </nav>
@@ -625,7 +627,7 @@ function Workspace() {
                 </button>)}
                 {filteredChats.length === 0 && <div className="empty-search">{loadingChats ? 'Chargement des discussions…' : account ? 'Aucune discussion pour le moment.' : 'Aucune discussion trouvée.'}</div>}
               </div>
-              <div className="online-block"><div className="online-heading">JOUEURS EN LIGNE <span>12</span></div><div className="online-avatars"><Avatar label="K" color="cyan" online /><Avatar label="M" color="violet" online /><Avatar label="A" color="pink" online /><Avatar label="+" color="dark" /><span>Voir les joueurs</span></div></div>
+              <div className="online-block"><div className="online-heading">PRÉSENCE DES JOUEURS</div><div className="online-avatars"><span>Les statuts en ligne seront activés avec le module de présence.</span></div></div>
             </section>
 
             <section className="chat-panel">
@@ -674,7 +676,7 @@ function Workspace() {
           <div className="admin-security-note"><ShieldCheck size={16} /><span>Accès contrôlé par le rôle sécurisé <code>app_metadata.role</code>. Les rôles ne sont jamais lus depuis les métadonnées modifiables du profil.</span></div>
         </section>}
 
-        {section === 'profil' && <section className="content-page"><div className="eyebrow">IDENTITÉ GAMER</div><h1>Mon profil<span className="title-dot">.</span></h1><div className="profile-card"><div className="profile-cover"><div className="cover-glow" /></div><div className="profile-details"><Avatar label="F" color="cyan" large /><div className="profile-data"><h2>{gamerName} <span className="verified-mark"><ShieldCheck size={15} /></span></h2><p>{gamerTag} · Joueur FREE CHAT</p><span className="profile-level"><Crown size={14} /> Niveau 1 · Nouveau joueur</span></div><button className="secondary-button" onClick={() => notify('La modification du profil sera bientôt disponible.')}>Modifier le profil</button></div><div className="profile-stats"><div><strong>01</strong><span>GUILDE</span></div><div><strong>04</strong><span>DISCUSSIONS</span></div><div><strong>01</strong><span>NIVEAU</span></div></div><div className="profile-note"><Sparkles size={17} /><span>Ton identité gamer évoluera au fil de tes aventures sur FREE CHAT.</span></div></div><div className="disclaimer"><ShieldCheck size={17} /><span>FREE CHAT est un projet indépendant. Les identifiants et statistiques de compte Free Fire ne sont pas vérifiés par Garena.</span></div></section>}
+        {section === 'profil' && <section className="content-page"><div className="eyebrow">IDENTITÉ GAMER</div><h1>Mon profil<span className="title-dot">.</span></h1><div className="profile-card"><div className="profile-cover"><div className="cover-glow" /></div><div className="profile-details"><Avatar label="F" color="cyan" large /><div className="profile-data"><h2>{gamerName} <span className="verified-mark"><ShieldCheck size={15} /></span></h2><p>{gamerTag} · Joueur FREE CHAT</p><span className="profile-level"><Crown size={14} /> Profil gamer</span></div><button className="secondary-button" onClick={() => notify('La modification du profil sera bientôt disponible.')}>Modifier le profil</button></div><div className="profile-stats"><div><strong>{myGuildCount}</strong><span>GUILDES</span></div><div><strong>{chats.length}</strong><span>DISCUSSIONS</span></div><div><strong>{myPostCount}</strong><span>PUBLICATIONS</span></div></div><div className="profile-note"><Sparkles size={17} /><span>Ton identité gamer évoluera au fil de tes aventures sur FREE CHAT.</span></div></div><div className="disclaimer"><ShieldCheck size={17} /><span>FREE CHAT est un projet indépendant. Les identifiants et statistiques de compte Free Fire ne sont pas vérifiés par Garena.</span></div></section>}
         {reportTarget && <div className="modal-backdrop" onClick={() => setReportTarget(null)}><form className="modal-card" onSubmit={submitReport} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setReportTarget(null)}><X size={18} /></button><div className="eyebrow">SÉCURITÉ DE LA COMMUNAUTÉ</div><h2>Signaler cette publication</h2><p>Décris le problème. Le signalement sera visible par l'équipe de modération.</p><textarea autoFocus value={reportReason} onChange={(event) => setReportReason(event.target.value)} placeholder="Explique pourquoi cette publication doit être examinée…" maxLength={500} /><small>{reportReason.length}/500</small><button className="primary-button" type="submit" disabled={sendingReport || reportReason.trim().length < 3}>{sendingReport ? 'Envoi…' : 'Envoyer le signalement'} <ArrowUpRight size={16} /></button></form></div>}
         <footer className="app-footer"><span>FREE CHAT <b>✦</b> FREE CHAT STUDIO</span><span>Une communauté. Une escouade. Ton univers.</span></footer>
       </main>
