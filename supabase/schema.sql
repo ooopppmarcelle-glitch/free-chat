@@ -1,6 +1,7 @@
 -- FREE CHAT database schema
 -- Snapshot of the schema applied to Supabase project gsxcobdgxuwndflmshai.
 -- Keep credentials out of this file. Use environment variables for the frontend.
+-- Realtime publication: public.messages is enabled separately for live message delivery.
 
 create table public.profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
