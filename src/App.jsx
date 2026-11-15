@@ -165,7 +165,7 @@ function Workspace() {
     const { data: memberships } = await supabase.from('conversation_members').select('conversation_id').eq('user_id', account.id);
     const ids = [...new Set((memberships || []).map((item) => item.conversation_id))];
     if (!ids.length) { setChats([]); return; }
-    const { data: conversations } = await supabase.from('conversations').select('id, participant_one, participant_two').in('id', ids).order('created_at', { ascending: false });
+    const { data: conversations } = await supabase.from('conversations').select('id, participant_one, participant_two, created_at').in('id', ids).order('created_at', { ascending: false });
     const otherIds = [...new Set((conversations || []).map((item) => item.participant_one === account.id ? item.participant_two : item.participant_one).filter(Boolean))];
     const { data: profiles } = await supabase.from('profiles').select('user_id, username, display_name').in('user_id', otherIds);
     const byId = new Map((profiles || []).map((profile) => [profile.user_id, profile]));
