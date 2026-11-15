@@ -5,7 +5,7 @@ import {
   Sparkles, Settings, Menu, X, ArrowUpRight, Zap, Crown, Image,
   CircleHelp, LogOut, CheckCheck, Mic, Phone, Video, UserPlus
 } from 'lucide-react';
-import { isSupabaseConfigured } from './lib/supabase.js';
+import { isSupabaseConfigured, supabase } from './lib/supabase.js';
 import AuthGate from './AuthGate.jsx';
 
 const initialChats = [
@@ -43,6 +43,16 @@ function Avatar({ label, color = 'cyan', online = false, large = false }) {
 }
 
 function Workspace() {
+  const [account, setAccount] = useState(null);
+  useEffect(() => {
+    if (!supabase) return undefined;
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => { if (active) setAccount(data.user || null); });
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => setAccount(session?.user || null));
+    return () => { active = false; authListener.subscription.unsubscribe(); };
+  }, []);
+  const gamerName = account?.user_metadata?.display_name || account?.user_metadata?.username || 'Joueur';
+  const gamerTag = account?.user_metadata?.username ? `@${account.user_metadata.username}` : account?.email || 'Compte connecté';
   const [section, setSection] = useState('messages');
   const [lightMode, setLightMode] = useState(false);
   const [activeChat, setActiveChat] = useState(1);
@@ -108,7 +118,7 @@ function Workspace() {
         </div>
         <div className="profile-mini">
           <Avatar label="F" color="cyan" online large />
-          <div className="profile-mini-text"><strong>Farel</strong><span><i className="status-pulse" /> En ligne</span></div>
+          <div className="profile-mini-text"><strong>{gamerName}</strong><span><i className="status-pulse" /> Compte connecté</span></div>
           <button className="tiny-icon" onClick={() => setSection('profil')} aria-label="Ouvrir mon profil"><MoreHorizontal size={20} /></button>
         </div>
         <div className="side-label">ESPACE GAMER</div>
@@ -127,6 +137,7 @@ function Workspace() {
         <div className="sidebar-bottom">
           <div className="upgrade-card"><div className="upgrade-icon"><Sparkles size={17} /></div><strong>Ton univers gamer.</strong><p>Un espace pour jouer, échanger et progresser ensemble.</p><span>FREE CHAT STUDIO</span></div>
           <button className="nav-item muted-nav" onClick={() => notify('Les paramètres arrivent dans une prochaine version.')}><Settings size={18} /><span>Paramètres</span></button>
+          {supabase && <button className="nav-item muted-nav" onClick={async () => { const { error } = await supabase.auth.signOut(); if (error) notify('Déconnexion impossible : ' + error.message); }}><LogOut size={18} /><span>Se déconnecter</span></button>}
           <div className="sidebar-signature">Créé par <strong>Farel</strong> <span>✦</span></div>
         </div>
       </aside>
@@ -176,7 +187,7 @@ function Workspace() {
 
         {section === 'decouvrir' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">LE FEED DES JOUEURS</div><h1>Découvrir<span className="title-dot">.</span></h1><p>Les idées, les annonces et les moments de la communauté.</p></div><button className="primary-button" onClick={() => notify('La publication sera disponible dans une prochaine version.')}><Plus size={17} /> Publier</button></div><div className="feed-layout"><div className="feed-list">{posts.map((post) => <article className="post-card" key={post.author}><div className="post-head"><Avatar label={post.avatar} color={post.color} /><div><strong>{post.author}</strong><small>{post.time}</small></div><span className="post-tag">{post.label}</span></div><p>{post.text}</p><div className="post-actions"><button className={liked.includes(post.author) ? 'liked' : ''} onClick={() => setLiked((previous) => previous.includes(post.author) ? previous.filter((name) => name !== post.author) : [...previous, post.author])}>✦ {post.likes + (liked.includes(post.author) ? 1 : 0)} réactions</button><button onClick={() => notify('Les commentaires arrivent bientôt.')}>{post.comments} commentaires</button><button onClick={() => notify('Le partage sera bientôt disponible.')}>Partager</button></div></article>)}</div><aside className="community-aside"><div className="aside-card"><div className="aside-icon"><Zap size={19} /></div><span className="eyebrow">À LA UNE</span><h3>La communauté prend vie.</h3><p>Retrouve les joueurs, découvre les guildes et prépare ta prochaine escouade.</p></div><div className="aside-card mini-aside"><span className="eyebrow">ESPRIT GAMER</span><h3>Respect. Stratégie. Fair-play.</h3><p>Une bonne communauté commence par de bonnes attitudes.</p></div></aside></div></section>}
 
-        {section === 'profil' && <section className="content-page"><div className="eyebrow">IDENTITÉ GAMER</div><h1>Mon profil<span className="title-dot">.</span></h1><div className="profile-card"><div className="profile-cover"><div className="cover-glow" /></div><div className="profile-details"><Avatar label="F" color="cyan" large /><div className="profile-data"><h2>Farel <span className="verified-mark"><ShieldCheck size={15} /></span></h2><p>@farel · Joueur FREE CHAT</p><span className="profile-level"><Crown size={14} /> Niveau 1 · Nouveau joueur</span></div><button className="secondary-button" onClick={() => notify('La modification du profil sera bientôt disponible.')}>Modifier le profil</button></div><div className="profile-stats"><div><strong>01</strong><span>GUILDE</span></div><div><strong>04</strong><span>DISCUSSIONS</span></div><div><strong>01</strong><span>NIVEAU</span></div></div><div className="profile-note"><Sparkles size={17} /><span>Ton identité gamer évoluera au fil de tes aventures sur FREE CHAT.</span></div></div><div className="disclaimer"><ShieldCheck size={17} /><span>FREE CHAT est un projet indépendant. Les identifiants et statistiques de compte Free Fire ne sont pas vérifiés par Garena.</span></div></section>}
+        {section === 'profil' && <section className="content-page"><div className="eyebrow">IDENTITÉ GAMER</div><h1>Mon profil<span className="title-dot">.</span></h1><div className="profile-card"><div className="profile-cover"><div className="cover-glow" /></div><div className="profile-details"><Avatar label="F" color="cyan" large /><div className="profile-data"><h2>{gamerName} <span className="verified-mark"><ShieldCheck size={15} /></span></h2><p>{gamerTag} · Joueur FREE CHAT</p><span className="profile-level"><Crown size={14} /> Niveau 1 · Nouveau joueur</span></div><button className="secondary-button" onClick={() => notify('La modification du profil sera bientôt disponible.')}>Modifier le profil</button></div><div className="profile-stats"><div><strong>01</strong><span>GUILDE</span></div><div><strong>04</strong><span>DISCUSSIONS</span></div><div><strong>01</strong><span>NIVEAU</span></div></div><div className="profile-note"><Sparkles size={17} /><span>Ton identité gamer évoluera au fil de tes aventures sur FREE CHAT.</span></div></div><div className="disclaimer"><ShieldCheck size={17} /><span>FREE CHAT est un projet indépendant. Les identifiants et statistiques de compte Free Fire ne sont pas vérifiés par Garena.</span></div></section>}
         <footer className="app-footer"><span>FREE CHAT <b>✦</b> FREE CHAT STUDIO</span><span>Une communauté. Une escouade. Ton univers.</span></footer>
       </main>
       {notice && <div className="toast"><Sparkles size={16} />{notice}</div>}
