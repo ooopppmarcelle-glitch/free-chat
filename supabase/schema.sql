@@ -269,9 +269,12 @@ create policy "Players update their own posts"
 on public.posts for update to authenticated
 using (author_id = (select auth.uid()))
 with check (author_id = (select auth.uid()));
-create policy "Players delete their own posts"
+create policy "Players and moderators delete community posts"
 on public.posts for delete to authenticated
-using (author_id = (select auth.uid()));
+using (
+  author_id = (select auth.uid())
+  or (select auth.jwt())->'app_metadata'->>'role' in ('owner','admin','moderator')
+);
 
 create policy "Signed-in players read comments on community posts"
 on public.post_comments for select to authenticated
@@ -282,9 +285,12 @@ with check (
   author_id = (select auth.uid())
   and exists (select 1 from public.posts p where p.id = post_id)
 );
-create policy "Players delete their own comments"
+create policy "Players and moderators delete community comments"
 on public.post_comments for delete to authenticated
-using (author_id = (select auth.uid()));
+using (
+  author_id = (select auth.uid())
+  or (select auth.jwt())->'app_metadata'->>'role' in ('owner','admin','moderator')
+);
 
 create policy "Signed-in players read post reactions"
 on public.post_reactions for select to authenticated
