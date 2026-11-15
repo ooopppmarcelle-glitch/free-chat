@@ -53,6 +53,8 @@ function Workspace() {
   }, []);
   const gamerName = account?.user_metadata?.display_name || account?.user_metadata?.username || 'Joueur';
   const gamerTag = account?.user_metadata?.username ? `@${account.user_metadata.username}` : account?.email || 'Compte connecté';
+  const userRole = account?.app_metadata?.role || null;
+  const canModerate = ['owner', 'admin', 'moderator'].includes(userRole);
   const [section, setSection] = useState('messages');
   const [lightMode, setLightMode] = useState(false);
   const [activeChat, setActiveChat] = useState(1);
@@ -556,8 +558,6 @@ function Workspace() {
     notify('Guilde créée dans cette démo.');
   }
 
-  const userRole = account?.app_metadata?.role || null;
-  const canModerate = ['owner', 'admin', 'moderator'].includes(userRole);
   const navItems = [
     { id: 'messages', label: 'Messages', icon: MessageCircle, count: 2 },
     { id: 'guildes', label: 'Guildes', icon: Users },
