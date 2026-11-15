@@ -30,7 +30,7 @@ export default function AuthGate({ children }) {
       active = false;
       listener.subscription.unsubscribe();
     };
-  });
+  }, []);
 
   async function ensureProfile(user) {
     if (!user) return;
