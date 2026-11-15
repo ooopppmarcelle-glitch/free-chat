@@ -189,7 +189,9 @@ on public.conversation_members for insert to authenticated
 with check (
   exists (
     select 1 from public.conversations c
-    where c.id = conversation_id and c.created_by = (select auth.uid())
+    where c.id = conversation_id
+      and c.created_by = (select auth.uid())
+      and (c.kind = 'group' or user_id in (c.participant_one, c.participant_two))
   )
 );
 create policy "Conversation creator or player leaves"
