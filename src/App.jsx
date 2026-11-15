@@ -74,6 +74,11 @@ function Workspace() {
   const [expandedComments, setExpandedComments] = useState([]);
   const [commentDrafts, setCommentDrafts] = useState({});
   const [sendingComment, setSendingComment] = useState(null);
+  const [reactionsByPost, setReactionsByPost] = useState({});
+  const [reactionBusy, setReactionBusy] = useState(null);
+  const [adminStats, setAdminStats] = useState({ players: 0, posts: 0, guilds: 0, openReports: 0 });
+  const [adminReports, setAdminReports] = useState([]);
+  const [loadingAdmin, setLoadingAdmin] = useState(false);
   const [showNewGuild, setShowNewGuild] = useState(false);
   const [guildName, setGuildName] = useState('');
   const [localGuilds, setLocalGuilds] = useState(guilds);
@@ -218,6 +223,7 @@ function Workspace() {
     if (!account?.id || !supabase) {
       setCommunityPosts(initialPosts);
       setCommentsByPost({});
+      setReactionsByPost({});
       return undefined;
     }
     let active = true;
@@ -242,6 +248,13 @@ function Workspace() {
         : { data: [], error: null };
       if (!active) return;
       if (commentResult.error) notify('Impossible de charger les commentaires : ' + commentResult.error.message);
+      const reactionResult = postIds.length
+        ? await supabase.from('post_reactions')
+            .select('id, post_id, user_id, reaction_type')
+            .in('post_id', postIds)
+        : { data: [], error: null };
+      if (!active) return;
+      if (reactionResult.error) notify('Impossible de charger les réactions : ' + reactionResult.error.message);
       const authorIds = [...new Set([
         ...(data || []).map((post) => post.author_id),
         ...(commentResult.data || []).map((comment) => comment.author_id)
@@ -274,15 +287,46 @@ function Workspace() {
         });
       });
       setCommentsByPost(groupedComments);
+      const groupedReactions = {};
+      (reactionResult.data || []).forEach((reaction) => {
+        if (!groupedReactions[reaction.post_id]) groupedReactions[reaction.post_id] = { count: 0, mine: false };
+        groupedReactions[reaction.post_id].count += 1;
+        if (reaction.user_id === account.id) groupedReactions[reaction.post_id].mine = true;
+      });
+      setReactionsByPost(groupedReactions);
       setLoadingPosts(false);
     }
     loadPosts();
     const channel = supabase.channel('free-chat-community-feed')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => { loadPosts(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments' }, () => { loadPosts(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_reactions' }, () => { loadPosts(); })
       .subscribe();
     return () => { active = false; supabase.removeChannel(channel); };
   }, [account?.id]);
+
+  async function toggleReaction(postId) {
+    if (!account?.id || !supabase) {
+      notify('Connecte-toi pour réagir à une publication.');
+      return;
+    }
+    if (reactionBusy === postId) return;
+    const current = reactionsByPost[postId] || { count: 0, mine: false };
+    setReactionBusy(postId);
+    const result = current.mine
+      ? await supabase.from('post_reactions').delete().eq('post_id', postId).eq('user_id', account.id)
+      : await supabase.from('post_reactions').insert({ post_id: postId, user_id: account.id, reaction_type: 'fire' });
+    if (result.error) {
+      notify('Réaction non enregistrée : ' + result.error.message);
+      setReactionBusy(null);
+      return;
+    }
+    setReactionsByPost((previous) => ({
+      ...previous,
+      [postId]: { count: Math.max(0, (previous[postId]?.count || 0) + (current.mine ? -1 : 1)), mine: !current.mine }
+    }));
+    setReactionBusy(null);
+  }
 
   function toggleComments(postId) {
     setExpandedComments((previous) => previous.includes(postId)
@@ -386,6 +430,50 @@ function Workspace() {
     window.setTimeout(() => setNotice(''), 2600);
   }
 
+  async function loadAdminDashboard() {
+    if (!canModerate || !supabase) return;
+    setLoadingAdmin(true);
+    const [players, posts, guildCount, reports, openReports] = await Promise.all([
+      supabase.from('profiles').select('*', { count: 'exact', head: true }),
+      supabase.from('posts').select('*', { count: 'exact', head: true }),
+      supabase.from('guilds').select('*', { count: 'exact', head: true }),
+      supabase.from('reports').select('id, reporter_id, target_type, target_id, reason, status, created_at').order('created_at', { ascending: false }).limit(50),
+      supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'open')
+    ]);
+    const firstError = players.error || posts.error || guildCount.error || reports.error || openReports.error;
+    if (firstError) notify('Tableau de bord partiellement chargé : ' + firstError.message);
+    setAdminStats({
+      players: players.count || 0, posts: posts.count || 0,
+      guilds: guildCount.count || 0, openReports: openReports.count || 0
+    });
+    const reporterIds = [...new Set((reports.data || []).map((report) => report.reporter_id))];
+    const { data: profiles } = reporterIds.length
+      ? await supabase.from('profiles').select('user_id, username, display_name').in('user_id', reporterIds)
+      : { data: [] };
+    const profileById = new Map((profiles || []).map((profile) => [profile.user_id, profile]));
+    setAdminReports((reports.data || []).map((report) => ({
+      ...report,
+      reporter: profileById.get(report.reporter_id)?.display_name || profileById.get(report.reporter_id)?.username || 'Joueur'
+    })));
+    setLoadingAdmin(false);
+  }
+
+  useEffect(() => {
+    if (section === 'admin' && canModerate) loadAdminDashboard();
+  }, [section, userRole]);
+
+  async function updateReportStatus(reportId, status) {
+    if (!canModerate || !supabase) return;
+    const { error } = await supabase.from('reports').update({ status }).eq('id', reportId);
+    if (error) { notify('Mise à jour impossible : ' + error.message); return; }
+    setAdminReports((items) => items.map((report) => report.id === reportId ? { ...report, status } : report));
+    setAdminStats((previous) => ({
+      ...previous,
+      openReports: Math.max(0, previous.openReports + (status === 'open' ? 1 : -1))
+    }));
+    notify('Signalement mis à jour.');
+  }
+
   async function sendMessage(event) {
     event.preventDefault();
     const body = draft.trim();
@@ -432,11 +520,14 @@ function Workspace() {
     notify('Guilde créée dans cette démo.');
   }
 
+  const userRole = account?.app_metadata?.role || null;
+  const canModerate = ['owner', 'admin', 'moderator'].includes(userRole);
   const navItems = [
     { id: 'messages', label: 'Messages', icon: MessageCircle, count: 2 },
     { id: 'guildes', label: 'Guildes', icon: Users },
     { id: 'decouvrir', label: 'Découvrir', icon: Compass },
-    { id: 'profil', label: 'Mon profil', icon: Gamepad2 }
+    { id: 'profil', label: 'Mon profil', icon: Gamepad2 },
+    ...(canModerate ? [{ id: 'admin', label: 'Administration', icon: ShieldCheck }] : [])
   ];
 
   return (
@@ -518,7 +609,28 @@ function Workspace() {
         {showNewChat && <div className="modal-backdrop" onClick={() => setShowNewChat(false)}><form className="modal-card" onSubmit={startDirectConversation} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewChat(false)}><X size={18} /></button><div className="eyebrow">NOUVELLE DISCUSSION</div><h2>Écrire à un joueur</h2><p>Recherche son pseudo FREE CHAT exact pour démarrer une conversation privée.</p><input autoFocus value={newPlayerUsername} onChange={(event) => setNewPlayerUsername(event.target.value)} placeholder="Pseudo du joueur" maxLength={24} /><button className="primary-button" type="submit" disabled={!newPlayerUsername.trim()}>Démarrer la discussion <ArrowUpRight size={16} /></button></form></div>}
         {section === 'guildes' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">JOUE ENSEMBLE</div><h1>Les guildes<span className="title-dot">.</span></h1><p>Rassemble ton escouade, partage tes stratégies et construis ta communauté.</p></div><button className="primary-button" onClick={() => setShowNewGuild(true)}><Plus size={17} /> Créer une guilde</button></div><div className="guild-grid">{localGuilds.map((guild) => <article className="guild-card" key={guild.id || guild.name}><div className={`guild-emblem symbol-${guild.color}`}>{guild.icon}</div><div className="guild-card-info"><span className="eyebrow">GUILDE GAMER</span><h2>{guild.name}</h2><p><Users size={14} /> {guild.members}</p>{guild.description && <p>{guild.description}</p>}</div><div className="guild-card-footer"><span><i /> {guild.status}</span>{account && guild.id && !guild.joined && !guild.owner ? <button onClick={() => joinGuild(guild)} aria-label={`Rejoindre ${guild.name}`}><UserPlus size={17} /></button> : <button onClick={() => notify(guild.owner ? 'Tu es chef de cette guilde.' : guild.joined ? 'Tu es membre de cette guilde.' : 'Les détails de cette guilde arrivent bientôt.')} aria-label={`Voir ${guild.name}`}><ArrowUpRight size={17} /></button>}</div></article>)}{loadingGuilds && <p>Chargement des guildes…</p>}{!loadingGuilds && account && localGuilds.length === 0 && <p>Aucune guilde publique pour le moment. Crée la première.</p>}</div>{showNewGuild && <div className="modal-backdrop" onClick={() => setShowNewGuild(false)}><form className="modal-card" onSubmit={createGuild} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewGuild(false)}><X size={18} /></button><div className="eyebrow">NOUVELLE COMMUNAUTÉ</div><h2>Créer une guilde</h2><p>Donne un nom à ton escouade. Tu pourras personnaliser ses détails ensuite.</p><input autoFocus value={guildName} onChange={(event) => setGuildName(event.target.value)} placeholder="Ex. NIGHT WOLVES" maxLength={32} /><textarea value={guildDescription} onChange={(event) => setGuildDescription(event.target.value)} placeholder="Description de ta guilde (facultatif)" maxLength={500} /><button className="primary-button" type="submit" disabled={guildName.trim().length < 3}>Créer la guilde <ArrowUpRight size={16} /></button></form></div>}</section>}
 
-        {section === 'decouvrir' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">LE FEED DES JOUEURS</div><h1>Découvrir<span className="title-dot">.</span></h1><p>Les idées, les annonces et les moments de la communauté.</p></div><button className="primary-button" onClick={() => account ? setShowNewPost(true) : notify('Connecte-toi pour publier dans la communauté.')}><Plus size={17} /> Publier</button></div><div className="feed-layout"><div className="feed-list">{communityPosts.map((post) => <article className="post-card" key={post.id || post.author}><div className="post-head"><Avatar label={post.avatar} color={post.color} /><div><strong>{post.author}</strong><small>{post.time}</small></div><span className="post-tag">{post.label}</span></div><p>{post.text}</p><div className="post-actions"><button onClick={() => notify('Les réactions seront ajoutées dans une prochaine version.')}>✦ Réactions</button><button onClick={() => toggleComments(post.id)}>{commentsByPost[post.id]?.length || 0} commentaire{(commentsByPost[post.id]?.length || 0) > 1 ? 's' : ''}</button><button onClick={() => notify('Le partage sera bientôt disponible.')}>Partager</button></div>{expandedComments.includes(post.id) && <div className="comments-panel">{(commentsByPost[post.id] || []).map((comment) => <div className="comment-row" key={comment.id}><Avatar label={comment.avatar} color="violet" /><div className="comment-copy"><strong>{comment.author}</strong><small>{comment.time}</small><p>{comment.body}</p></div></div>)}{account ? <form className="comment-composer" onSubmit={(event) => submitComment(event, post.id)}><input value={commentDrafts[post.id] || ''} onChange={(event) => setCommentDrafts((previous) => ({ ...previous, [post.id]: event.target.value }))} placeholder="Écrire un commentaire…" maxLength={1000} aria-label="Ton commentaire" /><button type="submit" disabled={!(commentDrafts[post.id] || '').trim() || sendingComment === post.id}>{sendingComment === post.id ? 'Envoi…' : <Send size={15} />}</button></form> : <p className="comments-signin">Connecte-toi pour participer à la discussion.</p>}</div>}</article>)}</div><aside className="community-aside"><div className="aside-card"><div className="aside-icon"><Zap size={19} /></div><span className="eyebrow">À LA UNE</span><h3>La communauté prend vie.</h3><p>Retrouve les joueurs, découvre les guildes et prépare ta prochaine escouade.</p></div><div className="aside-card mini-aside"><span className="eyebrow">ESPRIT GAMER</span><h3>Respect. Stratégie. Fair-play.</h3><p>Une bonne communauté commence par de bonnes attitudes.</p></div></aside></div>{loadingPosts && <p>Chargement des publications…</p>}{!loadingPosts && account && communityPosts.length === 0 && <p>Aucune publication pour le moment. Lance la conversation !</p>}</div>{showNewPost && <div className="modal-backdrop" onClick={() => setShowNewPost(false)}><form className="modal-card" onSubmit={createPost} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewPost(false)}><X size={18} /></button><div className="eyebrow">PRENDRE LA PAROLE</div><h2>Nouvelle publication</h2><p>Partage une idée, une annonce ou un moment avec les joueurs.</p><textarea autoFocus value={postDraft} onChange={(event) => setPostDraft(event.target.value)} placeholder="Quoi de neuf dans ta communauté ?" maxLength={3000} /><small>{postDraft.length}/3000</small><button className="primary-button" type="submit" disabled={!postDraft.trim()}>Publier <ArrowUpRight size={16} /></button></form></div>}</section>}
+        {section === 'decouvrir' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">LE FEED DES JOUEURS</div><h1>Découvrir<span className="title-dot">.</span></h1><p>Les idées, les annonces et les moments de la communauté.</p></div><button className="primary-button" onClick={() => account ? setShowNewPost(true) : notify('Connecte-toi pour publier dans la communauté.')}><Plus size={17} /> Publier</button></div><div className="feed-layout"><div className="feed-list">{communityPosts.map((post) => <article className="post-card" key={post.id || post.author}><div className="post-head"><Avatar label={post.avatar} color={post.color} /><div><strong>{post.author}</strong><small>{post.time}</small></div><span className="post-tag">{post.label}</span></div><p>{post.text}</p><div className="post-actions"><button className={reactionsByPost[post.id]?.mine ? 'liked' : ''} onClick={() => toggleReaction(post.id)} disabled={reactionBusy === post.id}>🔥 {reactionsByPost[post.id]?.count || 0} Réaction{(reactionsByPost[post.id]?.count || 0) > 1 ? 's' : ''}</button><button onClick={() => toggleComments(post.id)}>{commentsByPost[post.id]?.length || 0} commentaire{(commentsByPost[post.id]?.length || 0) > 1 ? 's' : ''}</button><button onClick={() => notify('Le partage sera bientôt disponible.')}>Partager</button></div>{expandedComments.includes(post.id) && <div className="comments-panel">{(commentsByPost[post.id] || []).map((comment) => <div className="comment-row" key={comment.id}><Avatar label={comment.avatar} color="violet" /><div className="comment-copy"><strong>{comment.author}</strong><small>{comment.time}</small><p>{comment.body}</p></div></div>)}{account ? <form className="comment-composer" onSubmit={(event) => submitComment(event, post.id)}><input value={commentDrafts[post.id] || ''} onChange={(event) => setCommentDrafts((previous) => ({ ...previous, [post.id]: event.target.value }))} placeholder="Écrire un commentaire…" maxLength={1000} aria-label="Ton commentaire" /><button type="submit" disabled={!(commentDrafts[post.id] || '').trim() || sendingComment === post.id}>{sendingComment === post.id ? 'Envoi…' : <Send size={15} />}</button></form> : <p className="comments-signin">Connecte-toi pour participer à la discussion.</p>}</div>}</article>)}</div><aside className="community-aside"><div className="aside-card"><div className="aside-icon"><Zap size={19} /></div><span className="eyebrow">À LA UNE</span><h3>La communauté prend vie.</h3><p>Retrouve les joueurs, découvre les guildes et prépare ta prochaine escouade.</p></div><div className="aside-card mini-aside"><span className="eyebrow">ESPRIT GAMER</span><h3>Respect. Stratégie. Fair-play.</h3><p>Une bonne communauté commence par de bonnes attitudes.</p></div></aside></div>{loadingPosts && <p>Chargement des publications…</p>}{!loadingPosts && account && communityPosts.length === 0 && <p>Aucune publication pour le moment. Lance la conversation !</p>}</div>{showNewPost && <div className="modal-backdrop" onClick={() => setShowNewPost(false)}><form className="modal-card" onSubmit={createPost} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewPost(false)}><X size={18} /></button><div className="eyebrow">PRENDRE LA PAROLE</div><h2>Nouvelle publication</h2><p>Partage une idée, une annonce ou un moment avec les joueurs.</p><textarea autoFocus value={postDraft} onChange={(event) => setPostDraft(event.target.value)} placeholder="Quoi de neuf dans ta communauté ?" maxLength={3000} /><small>{postDraft.length}/3000</small><button className="primary-button" type="submit" disabled={!postDraft.trim()}>Publier <ArrowUpRight size={16} /></button></form></div>}</section>}
+
+        {section === 'admin' && canModerate && <section className="content-page admin-page">
+          <div className="page-hero"><div><div className="eyebrow">ESPACE PRIVILÉGIÉ · {userRole?.toUpperCase()}</div><h1>Administration<span className="title-dot">.</span></h1><p>Suivi de la communauté, contrôle des signalements et outils de modération.</p></div><button className="secondary-button" onClick={loadAdminDashboard}><ArrowUpRight size={14} /> Actualiser</button></div>
+          <div className="admin-stat-grid">
+            <article className="admin-stat"><span>JOUEURS</span><strong>{adminStats.players}</strong></article>
+            <article className="admin-stat"><span>PUBLICATIONS</span><strong>{adminStats.posts}</strong></article>
+            <article className="admin-stat"><span>GUILDES</span><strong>{adminStats.guilds}</strong></article>
+            <article className="admin-stat"><span>À TRAITER</span><strong>{adminStats.openReports}</strong></article>
+          </div>
+          <div className="admin-section-heading"><div><div className="eyebrow">MODÉRATION</div><h2>Signalements récents</h2></div><span>{adminReports.length} affichés</span></div>
+          {loadingAdmin ? <p>Chargement du tableau de bord…</p> : adminReports.length === 0 ? <div className="admin-empty"><ShieldCheck size={24} /><strong>Aucun signalement.</strong><span>Les nouveaux signalements apparaîtront ici.</span></div> : <div className="admin-report-list">{adminReports.map((report) => <article className="admin-report" key={report.id}>
+            <div className="admin-report-top"><strong>{report.target_type.toUpperCase()}</strong><span className={'report-status status-' + report.status}>{report.status}</span></div>
+            <p>{report.reason}</p><small>Signalé par {report.reporter} · {new Date(report.created_at).toLocaleString('fr-FR')}</small>
+            <div className="admin-report-actions">
+              {report.status !== 'reviewing' && <button onClick={() => updateReportStatus(report.id, 'reviewing')}>Examiner</button>}
+              {report.status !== 'resolved' && <button onClick={() => updateReportStatus(report.id, 'resolved')}>Résoudre</button>}
+              {report.status !== 'dismissed' && <button onClick={() => updateReportStatus(report.id, 'dismissed')}>Classer sans suite</button>}
+            </div>
+          </article>)}</div>}
+          <div className="admin-security-note"><ShieldCheck size={16} /><span>Accès contrôlé par le rôle sécurisé <code>app_metadata.role</code>. Les rôles ne sont jamais lus depuis les métadonnées modifiables du profil.</span></div>
+        </section>}
 
         {section === 'profil' && <section className="content-page"><div className="eyebrow">IDENTITÉ GAMER</div><h1>Mon profil<span className="title-dot">.</span></h1><div className="profile-card"><div className="profile-cover"><div className="cover-glow" /></div><div className="profile-details"><Avatar label="F" color="cyan" large /><div className="profile-data"><h2>{gamerName} <span className="verified-mark"><ShieldCheck size={15} /></span></h2><p>{gamerTag} · Joueur FREE CHAT</p><span className="profile-level"><Crown size={14} /> Niveau 1 · Nouveau joueur</span></div><button className="secondary-button" onClick={() => notify('La modification du profil sera bientôt disponible.')}>Modifier le profil</button></div><div className="profile-stats"><div><strong>01</strong><span>GUILDE</span></div><div><strong>04</strong><span>DISCUSSIONS</span></div><div><strong>01</strong><span>NIVEAU</span></div></div><div className="profile-note"><Sparkles size={17} /><span>Ton identité gamer évoluera au fil de tes aventures sur FREE CHAT.</span></div></div><div className="disclaimer"><ShieldCheck size={17} /><span>FREE CHAT est un projet indépendant. Les identifiants et statistiques de compte Free Fire ne sont pas vérifiés par Garena.</span></div></section>}
         <footer className="app-footer"><span>FREE CHAT <b>✦</b> FREE CHAT STUDIO</span><span>Une communauté. Une escouade. Ton univers.</span></footer>
