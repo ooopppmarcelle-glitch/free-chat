@@ -65,7 +65,7 @@ Le projet ne contient actuellement aucun utilisateur : `auth.users = 0`, `profil
 1. Ouvrir le dépôt GitHub.
 2. Appuyer sur l'onglet **Actions**.
 3. Ouvrir le workflow **Build check**.
-4. Sélectionner l'exécution la plus récente correspondant à la branche `main).
+4. Appuyer sur **Run workflow**, choisir la branche `main`, puis confirmer avec **Run workflow**.
 5. Attendre la fin du job **build**.
 6. Une coche verte signifie que `npm install` et `npm run build` ont réussi pour le commit affiché. Une croix rouge signifie qu'il faut ouvrir le job et lire l'étape en erreur.
 
