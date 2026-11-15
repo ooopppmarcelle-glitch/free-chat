@@ -8,7 +8,7 @@
 
 Le projet dispose maintenant d'une base de messagerie, de guildes et d'une communauté connectées à Supabase. Les fonctionnalités de publications, commentaires, réactions et signalements ont leur logique applicative et leurs tables dédiées. Un tableau de bord de modération est intégré et protégé par les rôles de `app_metadata`.
 
-**Le projet n'est pas encore déclaré prêt pour une mise en production.** Aucun compte utilisateur n'existe encore dans la base. Par conséquent, les parcours réels de connexion, publication, messagerie entre deux joueurs et administration n'ont pas pu être validés avec des comptes actifs.
+**Le projet n'est pas encore déclaré prêt pour une mise en production.** Aucun compte utilisateur n'existe encore dans la base (contrôle : 0 utilisateur, 0 profil, 0 publication, 0 guilde et 0 signalement). Par conséquent, les parcours réels de connexion, publication, messagerie entre deux joueurs et administration n'ont pas pu être validés avec des comptes actifs.
 
 ## Éléments implémentés
 
@@ -40,7 +40,7 @@ Le projet dispose maintenant d'une base de messagerie, de guildes et d'une commu
 | Contrôle des politiques RLS | Effectué |
 | Contrôle des publications Realtime | Effectué |
 | Conseiller de sécurité Supabase | Aucun avertissement |
-| Compilation Vite sur GitHub Actions | À confirmer |
+| Compilation Vite sur GitHub Actions | À confirmer dans l'onglet Actions; aucun résultat de build vérifiable ici |
 | Inscription réelle et confirmation e-mail | Non testées |
 | Test de publication avec un compte connecté | Non testable sans compte |
 | Commentaires et réactions entre deux comptes | Non testés |
@@ -53,6 +53,13 @@ Le projet dispose maintenant d'une base de messagerie, de guildes et d'une commu
 
 Le projet ne contient actuellement aucun utilisateur : `auth.users = 0`, `profiles = 0`. L'attribution OWNER est donc en attente. La procédure manuelle sécurisée est documentée dans [OWNER_SETUP.md](OWNER_SETUP.md). Le rôle est stocké dans `app_metadata`, jamais dans les métadonnées modifiables par le joueur.
 
+## Liens de contrôle
+
+- [Ouvrir les exécutions GitHub Actions](https://github.com/ooopppmarcelle-glitch/free-chat/actions)
+- [Consulter les commits récents](https://github.com/ooopppmarcelle-glitch/free-chat/commits/main)
+- [Guide d'attribution OWNER](OWNER_SETUP.md)
+- [Plan de test manuel](TEST_PLAN.md)
+
 ## Procédure pour vérifier la compilation
 
 1. Ouvrir le dépôt GitHub.
@@ -62,7 +69,7 @@ Le projet ne contient actuellement aucun utilisateur : `auth.users = 0`, `profil
 5. Attendre la fin du job **build**.
 6. Une coche verte signifie que `npm install` et `npm run build` ont réussi pour le commit affiché. Une croix rouge signifie qu'il faut ouvrir le job et lire l'étape en erreur.
 
-La compilation doit être vérifiée sur le dernier commit, pas sur un ancien run. Le workflow est déclenché automatiquement à chaque push sur `main`.
+La compilation doit être vérifiée sur le dernier commit, pas sur un ancien run. Le workflow est déclenché automatiquement à chaque push sur `main`. Le dernier commit de rapport visible dans le dépôt est `750e698a515a49156cc13562d30c145a31e6a4f0`; vérifie que l'exécution sélectionnée correspond à un commit plus récent ou égal à celui-ci.
 
 ## Prochaines actions obligatoires
 
