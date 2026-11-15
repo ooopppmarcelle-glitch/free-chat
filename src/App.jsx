@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  MessageCircle, Users, Compass, Bell, Search, Plus, Send, Smile,
+  MessageCircle, Users, Compass, Bell, Search, Plus, Send, Smile, ArrowLeft,
   Paperclip, MoreHorizontal, Hash, ChevronDown, Gamepad2, ShieldCheck,
   Sparkles, Settings, Menu, X, ArrowUpRight, Zap, Crown, Image,
   CircleHelp, LogOut, CheckCheck, Mic, Phone, Video, UserPlus
@@ -49,6 +49,7 @@ function App() {
   const [draft, setDraft] = useState('');
   const [search, setSearch] = useState('');
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [showChatOnMobile, setShowChatOnMobile] = useState(false);
   const [notice, setNotice] = useState('');
   const [liked, setLiked] = useState([]);
   const [showNewGuild, setShowNewGuild] = useState(false);
@@ -111,7 +112,7 @@ function App() {
         <div className="side-label">ESPACE GAMER</div>
         <nav className="side-nav">
           {navItems.map(({ id, label, icon: Icon, count }) => (
-            <button key={id} className={`nav-item ${section === id ? 'nav-active' : ''}`} onClick={() => { setSection(id); setMobileMenu(false); }}>
+            <button key={id} className={`nav-item ${section === id ? 'nav-active' : ''}`} onClick={() => { setSection(id); setMobileMenu(false); setShowChatOnMobile(false); }}>
               <Icon size={19} /><span>{label}</span>{count ? <b className="nav-count">{count}</b> : null}
             </button>
           ))}
@@ -142,7 +143,7 @@ function App() {
               <div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher une discussion..." /><kbd>⌘ K</kbd></div>
               <div className="filter-row"><span>RÉCENTES <b>{chats.length}</b></span><button onClick={() => setSearch('')}>Tout voir <ArrowUpRight size={13} /></button></div>
               <div className="chat-list">
-                {filteredChats.map((chat) => <button key={chat.id} className={`chat-row ${activeChat === chat.id ? 'chat-selected' : ''}`} onClick={() => setActiveChat(chat.id)}>
+                {filteredChats.map((chat) => <button key={chat.id} className={`chat-row ${activeChat === chat.id ? 'chat-selected' : ''}`} onClick={() => { setActiveChat(chat.id); setShowChatOnMobile(true); }}>
                   <Avatar label={chat.avatar} color={chat.color} online={chat.online} />
                   <span className="chat-row-copy"><strong>{chat.name}</strong><small>{chat.last}</small></span>
                   <span className="chat-meta"><small>{chat.time}</small>{chat.unread > 0 && <b>{chat.unread}</b>}</span>
@@ -154,7 +155,7 @@ function App() {
 
             <section className="chat-panel">
               {currentChat ? <>
-                <div className="chat-header"><div className="chat-person"><Avatar label={currentChat.avatar} color={currentChat.color} online={currentChat.online} /><div><strong>{currentChat.name}</strong><span>{currentChat.online ? 'En ligne maintenant' : currentChat.tag}</span></div></div><div className="chat-tools"><button className="icon-button" onClick={() => notify('Les appels seront ajoutés après validation technique.')} aria-label="Appel audio"><Phone size={18} /></button><button className="icon-button" onClick={() => notify('Les appels vidéo seront ajoutés après validation technique.')} aria-label="Appel vidéo"><Video size={18} /></button><button className="icon-button" onClick={() => notify('Options de discussion à venir.')} aria-label="Plus d’options"><MoreHorizontal size={20} /></button></div></div>
+                <div className="chat-header"><button className="icon-button mobile-back" onClick={() => setShowChatOnMobile(false)} aria-label="Retour aux discussions"><ArrowLeft size={19} /></button><div className="chat-person"><Avatar label={currentChat.avatar} color={currentChat.color} online={currentChat.online} /><div><strong>{currentChat.name}</strong><span>{currentChat.online ? 'En ligne maintenant' : currentChat.tag}</span></div></div><div className="chat-tools"><button className="icon-button" onClick={() => notify('Les appels seront ajoutés après validation technique.')} aria-label="Appel audio"><Phone size={18} /></button><button className="icon-button" onClick={() => notify('Les appels vidéo seront ajoutés après validation technique.')} aria-label="Appel vidéo"><Video size={18} /></button><button className="icon-button" onClick={() => notify('Options de discussion à venir.')} aria-label="Plus d’options"><MoreHorizontal size={20} /></button></div></div>
                 <div className="chat-context"><span className="context-lock"><ShieldCheck size={14} /></span><span>Bienvenue dans ton espace de discussion. Respect et fair-play avant tout.</span></div>
                 <div className="messages-area"><div className="date-divider"><span>AUJOURD’HUI</span></div>
                   {currentMessages.map((message) => <div key={message.id} className={`message-line ${message.mine ? 'message-mine' : ''}`}>
