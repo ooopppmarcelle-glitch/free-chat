@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   MessageCircle, Users, Compass, Bell, Search, Plus, Send, Smile, ArrowLeft,
-  Paperclip, MoreHorizontal, Hash, ChevronDown, Gamepad2, ShieldCheck,
+  Paperclip, MoreHorizontal, Hash, ChevronDown, Gamepad2, ShieldCheck, Sun, Moon,
   Sparkles, Settings, Menu, X, ArrowUpRight, Zap, Crown, Image,
   CircleHelp, LogOut, CheckCheck, Mic, Phone, Video, UserPlus
 } from 'lucide-react';
@@ -43,6 +43,7 @@ function Avatar({ label, color = 'cyan', online = false, large = false }) {
 
 function App() {
   const [section, setSection] = useState('messages');
+  const [lightMode, setLightMode] = useState(false);
   const [activeChat, setActiveChat] = useState(1);
   const [chats, setChats] = useState(initialChats);
   const [messages, setMessages] = useState(initialMessages);
@@ -96,7 +97,7 @@ function App() {
   ];
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${lightMode ? 'theme-light' : ''}`}>
       <div className="ambient ambient-one" /><div className="ambient ambient-two" />
       <aside className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}>
         <div className="brand">
@@ -133,7 +134,7 @@ function App() {
         <header className="topbar">
           <button className="icon-button mobile-menu-button" onClick={() => setMobileMenu(true)} aria-label="Ouvrir le menu"><Menu size={21} /></button>
           <div className="breadcrumb"><span>FREE CHAT</span><b>/</b>{navItems.find((item) => item.id === section)?.label || 'Messages'}</div>
-          <div className="top-actions"><div className="connection-pill"><i /> Communauté active</div><button className="icon-button notification-button" onClick={() => notify('Tu es à jour. Aucune nouvelle notification.')} aria-label="Notifications"><Bell size={19} /><i /></button><button className="top-avatar" onClick={() => setSection('profil')}>F</button></div>
+          <div className="top-actions"><div className="connection-pill"><i /> Communauté active</div><button className="icon-button theme-toggle" onClick={() => setLightMode((value) => !value)} aria-label={lightMode ? "Activer le thème sombre" : "Activer le thème clair"}>{lightMode ? <Moon size={18} /> : <Sun size={18} />}</button><button className="icon-button notification-button" onClick={() => notify('Tu es à jour. Aucune nouvelle notification.')} aria-label="Notifications"><Bell size={19} /><i /></button><button className="top-avatar" onClick={() => setSection('profil')}>F</button></div>
         </header>
 
         {section === 'messages' && (
