@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   MessageCircle, Users, Compass, Bell, Search, Plus, Send, Smile, ArrowLeft,
   Paperclip, MoreHorizontal, Hash, ChevronDown, Gamepad2, ShieldCheck, Sun, Moon,
