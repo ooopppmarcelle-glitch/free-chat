@@ -1,7 +1,7 @@
 -- FREE CHAT database schema
 -- Snapshot of the schema applied to Supabase project gsxcobdgxuwndflmshai.
 -- Keep credentials out of this file. Use environment variables for the frontend.
--- Realtime publication: public.messages is enabled separately for live message delivery.
+-- Realtime publication: public.messages and public.posts are enabled separately for live updates.
 
 create table public.profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -105,6 +105,9 @@ alter table public.conversation_members enable row level security;
 alter table public.messages enable row level security;
 alter table public.posts enable row level security;
 alter table public.reports enable row level security;
+
+-- Run once in Supabase to enable live community feed updates:
+-- alter publication supabase_realtime add table public.posts;
 
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update, delete on public.guilds to authenticated;
