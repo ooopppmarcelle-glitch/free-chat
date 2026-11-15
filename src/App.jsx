@@ -58,6 +58,9 @@ function Workspace() {
   const [activeChat, setActiveChat] = useState(1);
   const [chats, setChats] = useState(initialChats);
   const [messages, setMessages] = useState(initialMessages);
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [newPlayerUsername, setNewPlayerUsername] = useState('');
+  const [loadingChats, setLoadingChats] = useState(false);
   const [draft, setDraft] = useState('');
   const [search, setSearch] = useState('');
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -67,6 +70,98 @@ function Workspace() {
   const [showNewGuild, setShowNewGuild] = useState(false);
   const [guildName, setGuildName] = useState('');
   const [localGuilds, setLocalGuilds] = useState(guilds);
+
+
+  useEffect(() => {
+    if (!account?.id || !supabase) return;
+    let active = true;
+    async function loadChats() {
+      setLoadingChats(true);
+      const { data: memberships, error: membershipError } = await supabase.from('conversation_members').select('conversation_id').eq('user_id', account.id);
+      if (membershipError) { if (active) notify('Impossible de charger tes discussions : ' + membershipError.message); setLoadingChats(false); return; }
+      const ids = [...new Set((memberships || []).map((item) => item.conversation_id))];
+      if (!ids.length) { if (active) { setChats([]); setActiveChat(null); } setLoadingChats(false); return; }
+      const { data: conversations, error: conversationError } = await supabase.from('conversations').select('id, kind, title, participant_one, participant_two, created_at').in('id', ids).order('created_at', { ascending: false });
+      if (conversationError) { if (active) notify('Erreur de chargement : ' + conversationError.message); setLoadingChats(false); return; }
+      const otherIds = [...new Set((conversations || []).map((item) => item.participant_one === account.id ? item.participant_two : item.participant_one).filter(Boolean))];
+      const [{ data: profiles }, { data: recentMessages }] = await Promise.all([
+        supabase.from('profiles').select('user_id, username, display_name, avatar_url').in('user_id', otherIds),
+        supabase.from('messages').select('id, conversation_id, sender_id, body, created_at').in('conversation_id', ids).order('created_at', { ascending: false })
+      ]);
+      const profileById = new Map((profiles || []).map((profile) => [profile.user_id, profile]));
+      const latestByConversation = new Map();
+      (recentMessages || []).forEach((message) => { if (!latestByConversation.has(message.conversation_id)) latestByConversation.set(message.conversation_id, message); });
+      const mapped = (conversations || []).map((conversation) => {
+        const otherId = conversation.participant_one === account.id ? conversation.participant_two : conversation.participant_one;
+        const profile = profileById.get(otherId);
+        const latest = latestByConversation.get(conversation.id);
+        const label = profile?.display_name || profile?.username || 'Joueur';
+        return { id: conversation.id, name: label, tag: '@' + (profile?.username || 'joueur'), avatar: label.slice(0, 1).toUpperCase(), color: 'cyan', online: false, unread: 0, last: latest?.body || 'Nouvelle discussion', time: latest ? new Date(latest.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'Nouveau', otherId };
+      });
+      if (active) {
+        setChats(mapped);
+        setActiveChat((current) => mapped.some((chat) => chat.id === current) ? current : (mapped[0]?.id || null));
+      }
+      setLoadingChats(false);
+    }
+    loadChats();
+    return () => { active = false; };
+  }, [account?.id]);
+
+  useEffect(() => {
+    if (!account?.id || !supabase || !activeChat || typeof activeChat !== 'string') return;
+    let active = true;
+    supabase.from('messages').select('id, sender_id, body, created_at').eq('conversation_id', activeChat).order('created_at', { ascending: true }).then(({ data, error }) => {
+      if (!active) return;
+      if (error) { notify('Impossible de charger les messages : ' + error.message); return; }
+      setMessages((previous) => ({ ...previous, [activeChat]: (data || []).map((message) => ({
+        id: message.id, from: message.sender_id === account.id ? gamerName : (currentChat?.name || 'Joueur'),
+        text: message.body, time: new Date(message.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        mine: message.sender_id === account.id
+      })) }));
+    });
+    return () => { active = false; };
+  }, [account?.id, activeChat]);
+
+  async function startDirectConversation(event) {
+    event.preventDefault();
+    if (!account?.id || !supabase) return;
+    const username = newPlayerUsername.trim().toLowerCase();
+    if (!/^[a-z0-9_]{3,24}$/.test(username)) { notify('Entre un pseudo valide (3 à 24 caractères).'); return; }
+    const { data: target, error: lookupError } = await supabase.from('profiles').select('user_id, username, display_name').eq('username', username).maybeSingle();
+    if (lookupError) { notify('Recherche impossible : ' + lookupError.message); return; }
+    if (!target) { notify('Aucun joueur trouvé avec ce pseudo.'); return; }
+    if (target.user_id === account.id) { notify('Tu ne peux pas démarrer une discussion avec toi-même.'); return; }
+    const { data: conversation, error: createError } = await supabase.from('conversations').insert({ kind: 'direct', created_by: account.id, participant_one: account.id, participant_two: target.user_id }).select('id').single();
+    if (createError) { notify('Création impossible : ' + createError.message); return; }
+    const { error: membersError } = await supabase.from('conversation_members').insert([
+      { conversation_id: conversation.id, user_id: account.id },
+      { conversation_id: conversation.id, user_id: target.user_id }
+    ]);
+    if (membersError) { notify('Discussion créée, mais ajout du joueur impossible : ' + membersError.message); return; }
+    setShowNewChat(false);
+    setNewPlayerUsername('');
+    await refreshConversations();
+    setActiveChat(conversation.id);
+    setShowChatOnMobile(true);
+    notify('Discussion créée avec ' + (target.display_name || target.username) + '.');
+  }
+
+  async function refreshConversations() {
+    if (!account?.id || !supabase) return;
+    const { data: memberships } = await supabase.from('conversation_members').select('conversation_id').eq('user_id', account.id);
+    const ids = [...new Set((memberships || []).map((item) => item.conversation_id))];
+    if (!ids.length) { setChats([]); return; }
+    const { data: conversations } = await supabase.from('conversations').select('id, participant_one, participant_two').in('id', ids).order('created_at', { ascending: false });
+    const otherIds = [...new Set((conversations || []).map((item) => item.participant_one === account.id ? item.participant_two : item.participant_one).filter(Boolean))];
+    const { data: profiles } = await supabase.from('profiles').select('user_id, username, display_name').in('user_id', otherIds);
+    const byId = new Map((profiles || []).map((profile) => [profile.user_id, profile]));
+    setChats((conversations || []).map((conversation) => {
+      const otherId = conversation.participant_one === account.id ? conversation.participant_two : conversation.participant_one;
+      const profile = byId.get(otherId); const label = profile?.display_name || profile?.username || 'Joueur';
+      return { id: conversation.id, name: label, tag: '@' + (profile?.username || 'joueur'), avatar: label.slice(0,1).toUpperCase(), color: 'cyan', online: false, unread: 0, last: 'Nouvelle discussion', time: 'Nouveau', otherId };
+    }));
+  }
 
   const currentChat = chats.find((chat) => chat.id === activeChat) || chats[0];
   const currentMessages = messages[activeChat] || [];
@@ -80,13 +175,25 @@ function Workspace() {
     window.setTimeout(() => setNotice(''), 2600);
   }
 
-  function sendMessage(event) {
+  async function sendMessage(event) {
     event.preventDefault();
-    const text = draft.trim();
-    if (!text || !currentChat) return;
-    const nextMessage = { id: Date.now(), from: 'Moi', text, time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }), mine: true };
+    const body = draft.trim();
+    if (!body || !currentChat) return;
+    if (account?.id && supabase && typeof activeChat === 'string') {
+      const { error } = await supabase.from('messages').insert({ conversation_id: activeChat, sender_id: account.id, body });
+      if (error) { notify('Message non envoyé : ' + error.message); return; }
+      setDraft('');
+      const { data } = await supabase.from('messages').select('id, sender_id, body, created_at').eq('conversation_id', activeChat).order('created_at', { ascending: true });
+      setMessages((previous) => ({ ...previous, [activeChat]: (data || []).map((message) => ({
+        id: message.id, from: message.sender_id === account.id ? gamerName : currentChat.name, text: message.body,
+        time: new Date(message.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }), mine: message.sender_id === account.id
+      })) }));
+      setChats((previous) => previous.map((chat) => chat.id === activeChat ? { ...chat, last: body, time: 'À l’instant' } : chat));
+      return;
+    }
+    const nextMessage = { id: Date.now(), from: 'Moi', text: body, time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }), mine: true };
     setMessages((previous) => ({ ...previous, [activeChat]: [...(previous[activeChat] || []), nextMessage] }));
-    setChats((previous) => previous.map((chat) => chat.id === activeChat ? { ...chat, last: text, time: 'À l’instant' } : chat));
+    setChats((previous) => previous.map((chat) => chat.id === activeChat ? { ...chat, last: body, time: 'À l’instant' } : chat));
     setDraft('');
   }
 
@@ -152,7 +259,7 @@ function Workspace() {
         {section === 'messages' && (
           <div className={`messenger-layout ${showChatOnMobile ? 'mobile-chat-open' : ''}`}>
             <section className="conversation-panel">
-              <div className="panel-heading"><div><div className="eyebrow">TON ESPACE DE COMMUNICATION</div><h1>Messages<span className="title-dot">.</span></h1></div><button className="square-action" onClick={() => notify('La recherche de joueurs sera bientôt disponible.')} aria-label="Nouveau message"><Plus size={19} /></button></div>
+              <div className="panel-heading"><div><div className="eyebrow">TON ESPACE DE COMMUNICATION</div><h1>Messages<span className="title-dot">.</span></h1></div><button className="square-action" onClick={() => setShowNewChat(true)} aria-label="Nouveau message"><Plus size={19} /></button></div>
               <div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher une discussion..." /><kbd>⌘ K</kbd></div>
               <div className="filter-row"><span>RÉCENTES <b>{chats.length}</b></span><button onClick={() => setSearch('')}>Tout voir <ArrowUpRight size={13} /></button></div>
               <div className="chat-list">
@@ -161,7 +268,7 @@ function Workspace() {
                   <span className="chat-row-copy"><strong>{chat.name}</strong><small>{chat.last}</small></span>
                   <span className="chat-meta"><small>{chat.time}</small>{chat.unread > 0 && <b>{chat.unread}</b>}</span>
                 </button>)}
-                {filteredChats.length === 0 && <div className="empty-search">Aucune discussion trouvée.</div>}
+                {filteredChats.length === 0 && <div className="empty-search">{loadingChats ? 'Chargement des discussions…' : account ? 'Aucune discussion pour le moment.' : 'Aucune discussion trouvée.'}</div>}
               </div>
               <div className="online-block"><div className="online-heading">JOUEURS EN LIGNE <span>12</span></div><div className="online-avatars"><Avatar label="K" color="cyan" online /><Avatar label="M" color="violet" online /><Avatar label="A" color="pink" online /><Avatar label="+" color="dark" /><span>Voir les joueurs</span></div></div>
             </section>
@@ -183,6 +290,7 @@ function Workspace() {
           </div>
         )}
 
+        {showNewChat && <div className="modal-backdrop" onClick={() => setShowNewChat(false)}><form className="modal-card" onSubmit={startDirectConversation} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewChat(false)}><X size={18} /></button><div className="eyebrow">NOUVELLE DISCUSSION</div><h2>Écrire à un joueur</h2><p>Recherche son pseudo FREE CHAT exact pour démarrer une conversation privée.</p><input autoFocus value={newPlayerUsername} onChange={(event) => setNewPlayerUsername(event.target.value)} placeholder="Pseudo du joueur" maxLength={24} /><button className="primary-button" type="submit" disabled={!newPlayerUsername.trim()}>Démarrer la discussion <ArrowUpRight size={16} /></button></form></div>}
         {section === 'guildes' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">JOUE ENSEMBLE</div><h1>Les guildes<span className="title-dot">.</span></h1><p>Rassemble ton escouade, partage tes stratégies et construis ta communauté.</p></div><button className="primary-button" onClick={() => setShowNewGuild(true)}><Plus size={17} /> Créer une guilde</button></div><div className="guild-grid">{localGuilds.map((guild) => <article className="guild-card" key={guild.name}><div className={`guild-emblem symbol-${guild.color}`}>{guild.icon}</div><div className="guild-card-info"><span className="eyebrow">GUILDE GAMER</span><h2>{guild.name}</h2><p><Users size={14} /> {guild.members}</p></div><div className="guild-card-footer"><span><i /> {guild.status}</span><button onClick={() => notify('La page détaillée de cette guilde arrive bientôt.')} aria-label={`Voir ${guild.name}`}><ArrowUpRight size={17} /></button></div></article>)}</div>{showNewGuild && <div className="modal-backdrop" onClick={() => setShowNewGuild(false)}><form className="modal-card" onSubmit={createGuild} onClick={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={() => setShowNewGuild(false)}><X size={18} /></button><div className="eyebrow">NOUVELLE COMMUNAUTÉ</div><h2>Créer une guilde</h2><p>Donne un nom à ton escouade. Tu pourras personnaliser ses détails ensuite.</p><input autoFocus value={guildName} onChange={(event) => setGuildName(event.target.value)} placeholder="Ex. NIGHT WOLVES" maxLength={28} /><button className="primary-button" type="submit" disabled={!guildName.trim()}>Créer la guilde <ArrowUpRight size={16} /></button></form></div>}</section>}
 
         {section === 'decouvrir' && <section className="content-page"><div className="page-hero"><div><div className="eyebrow">LE FEED DES JOUEURS</div><h1>Découvrir<span className="title-dot">.</span></h1><p>Les idées, les annonces et les moments de la communauté.</p></div><button className="primary-button" onClick={() => notify('La publication sera disponible dans une prochaine version.')}><Plus size={17} /> Publier</button></div><div className="feed-layout"><div className="feed-list">{posts.map((post) => <article className="post-card" key={post.author}><div className="post-head"><Avatar label={post.avatar} color={post.color} /><div><strong>{post.author}</strong><small>{post.time}</small></div><span className="post-tag">{post.label}</span></div><p>{post.text}</p><div className="post-actions"><button className={liked.includes(post.author) ? 'liked' : ''} onClick={() => setLiked((previous) => previous.includes(post.author) ? previous.filter((name) => name !== post.author) : [...previous, post.author])}>✦ {post.likes + (liked.includes(post.author) ? 1 : 0)} réactions</button><button onClick={() => notify('Les commentaires arrivent bientôt.')}>{post.comments} commentaires</button><button onClick={() => notify('Le partage sera bientôt disponible.')}>Partager</button></div></article>)}</div><aside className="community-aside"><div className="aside-card"><div className="aside-icon"><Zap size={19} /></div><span className="eyebrow">À LA UNE</span><h3>La communauté prend vie.</h3><p>Retrouve les joueurs, découvre les guildes et prépare ta prochaine escouade.</p></div><div className="aside-card mini-aside"><span className="eyebrow">ESPRIT GAMER</span><h3>Respect. Stratégie. Fair-play.</h3><p>Une bonne communauté commence par de bonnes attitudes.</p></div></aside></div></section>}
@@ -192,7 +300,7 @@ function Workspace() {
       </main>
       {notice && <div className="toast"><Sparkles size={16} />{notice}</div>}
       {mobileMenu && <button className="mobile-scrim" onClick={() => setMobileMenu(false)} aria-label="Fermer le menu" />}
-      <div className="demo-indicator"><span /> MODE APERÇU · données locales non synchronisées</div>
+      <div className="demo-indicator"><span /> {account ? "MESSAGERIE CONNECTÉE · autres espaces en aperçu" : "MODE APERÇU · données locales non synchronisées"}</div>
     </div>
   );
 }
